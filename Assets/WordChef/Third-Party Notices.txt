@@ -1,0 +1,11 @@
+Asset is governed by the Asset Store EULA; however, the following components are governed by the licenses indicated below:
+
+1. 
+name of component: Google Mobile Ads
+name of license: Apache 2.0
+license details: determined by relevant license (GoogleMobileAds License.txt) under WordChef/GoogleMobileAds folder
+
+2.
+name of component: Play Services Resolver
+name of license: Apache 2.0
+license details: determined by relevant license (PlayServicesResolver License.txt) under WordChef/PlayServicesResolver folder
