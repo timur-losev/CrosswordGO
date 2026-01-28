@@ -25,13 +25,24 @@ public class LineDrawer : MonoBehaviour {
     private void Start()
     {
         lineRenderer = GetComponent<LineRenderer>();
-        lineRenderer.sortingLayerName = "MyLineRenderer";
+        if (lineRenderer != null)
+        {
+            lineRenderer.sortingLayerName = "MyLineRenderer";
+        }
     }
 
     private void Update()
     {
-        if (DialogController.instance.IsDialogShowing()) return;
-        if (SocialRegion.instance.isShowing) return;
+        if (DialogController.instance != null && DialogController.instance.IsDialogShowing()) return;
+        if (SocialRegion.instance != null && SocialRegion.instance.isShowing) return;
+        if (textPreview == null) return;
+
+        if (lineRenderer == null)
+        {
+            lineRenderer = GetComponent<LineRenderer>();
+            if (lineRenderer == null) return;
+            lineRenderer.sortingLayerName = "MyLineRenderer";
+        }
 
         if (Input.GetMouseButtonDown(0))
         {

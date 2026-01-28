@@ -1,10 +1,11 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Assets.SimpleAndroidNotifications;
 using System;
 using Superpow;
 using System.Text;
+using System.Linq;
 
 public class NotificationController : MonoBehaviour {
 
@@ -175,6 +176,11 @@ public class NotificationController : MonoBehaviour {
     {
         string[] progress = Prefs.levelProgress;
         GameLevel gameLevel = Utils.Load(Prefs.unlockedWorld, Prefs.unlockedSubWorld, Prefs.unlockedLevel);
+        if (gameLevel == null)
+        {
+            gameLevel = BuildGameLevelFromCrossword(Prefs.unlockedWorld, Prefs.unlockedSubWorld, Prefs.unlockedLevel);
+            if (gameLevel == null) return null;
+        }
         var answers = CUtils.BuildListFromString<string>(gameLevel.answers);
 
         var index = GetUnlockLetterIndex(progress, numPass);
@@ -189,6 +195,28 @@ public class NotificationController : MonoBehaviour {
             else return null;
         }
         return null;
+    }
+
+    private GameLevel BuildGameLevelFromCrossword(int world, int subWorld, int level)
+    {
+        string path = WordRegion.GetCrosswordConfigPath(world, subWorld, level);
+        var configs = CrosswordLoader.LoadCrosswordConfig(path);
+        if (configs == null || configs.Count == 0) return null;
+
+        var gl = ScriptableObject.CreateInstance<GameLevel>();
+        gl.answers = string.Join("|", configs.Select(c => c.Answer));
+        gl.validWords = string.Empty;
+
+        var uniqueChars = new HashSet<char>();
+        foreach (var cfg in configs)
+        {
+            foreach (char ch in cfg.Answer.ToUpper())
+            {
+                uniqueChars.Add(ch);
+            }
+        }
+        gl.word = new string(uniqueChars.ToArray());
+        return gl;
     }
 
     private void UnlockLetter()
