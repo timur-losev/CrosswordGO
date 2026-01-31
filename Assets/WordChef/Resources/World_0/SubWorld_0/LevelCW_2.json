@@ -1,0 +1,28 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "rain",
+            "XPos": 11,
+            "YPos": 8,
+            "Direction": 0
+        },
+        {
+            "Answer": "hair",
+            "XPos": 11,
+            "YPos": 5,
+            "Direction": 1
+        },
+        {
+            "Answer": "era",
+            "XPos": 9,
+            "YPos": 6,
+            "Direction": 0
+        },
+        {
+            "Answer": "air",
+            "XPos": 12,
+            "YPos": 8,
+            "Direction": 1
+        }
+    ]
+}

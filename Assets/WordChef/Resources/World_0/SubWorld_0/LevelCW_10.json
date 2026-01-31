@@ -1,0 +1,64 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "Arch",
+            "XPos": 11,
+            "YPos": 7,
+            "Direction": 1
+        },
+        {
+            "Answer": "Cart",
+            "XPos": 10,
+            "YPos": 7,
+            "Direction": 0
+        },
+        {
+            "Answer": "Char",
+            "XPos": 12,
+            "YPos": 4,
+            "Direction": 1
+        },
+        {
+            "Answer": "Chart",
+            "XPos": 11,
+            "YPos": 9,
+            "Direction": 0
+        },
+        {
+            "Answer": "Chat",
+            "XPos": 15,
+            "YPos": 6,
+            "Direction": 1
+        },
+        {
+            "Answer": "Crath",
+            "XPos": 7,
+            "YPos": 10,
+            "Direction": 0
+        },
+        {
+            "Answer": "Harc",
+            "XPos": 15,
+            "YPos": 7,
+            "Direction": 0
+        },
+        {
+            "Answer": "Hart",
+            "XPos": 8,
+            "YPos": 8,
+            "Direction": 1
+        },
+        {
+            "Answer": "Rath",
+            "XPos": 5,
+            "YPos": 8,
+            "Direction": 0
+        },
+        {
+            "Answer": "Tach",
+            "XPos": 18,
+            "YPos": 5,
+            "Direction": 1
+        }
+    ]
+}

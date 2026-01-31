@@ -10,6 +10,7 @@ public class WordRegion : MonoBehaviour
     private List<LineWord> lines = new List<LineWord>();
     private List<string> validWords = new List<string>();
     private Dictionary<Vector2Int, Cell> cellMap = new Dictionary<Vector2Int, Cell>();
+    private List<string> allWordsUpper = new List<string>();
 
     private GameLevel gameLevel;
     private float cellSize;
@@ -50,6 +51,7 @@ public class WordRegion : MonoBehaviour
 
         var wordList = CUtils.BuildListFromString<string>(this.gameLevel.answers);
         validWords = CUtils.BuildListFromString<string>(this.gameLevel.validWords);
+        BuildAllWords(wordList);
 
         // Загрузка кроссворда из конфигурации
         string configFilePath = GetCrosswordConfigPath(GameState.currentWorld, GameState.currentSubWorld, GameState.currentLevel);
@@ -188,6 +190,57 @@ public class WordRegion : MonoBehaviour
         float y = originY - cellPosition.y * step;
 
         return new Vector2(x, y);
+    }
+
+    private void BuildAllWords(List<string> wordList)
+    {
+        var set = new HashSet<string>();
+        if (wordList != null)
+        {
+            foreach (var word in wordList)
+            {
+                if (!string.IsNullOrEmpty(word))
+                {
+                    set.Add(word.ToUpperInvariant());
+                }
+            }
+        }
+
+        if (validWords != null)
+        {
+            foreach (var word in validWords)
+            {
+                if (!string.IsNullOrEmpty(word))
+                {
+                    set.Add(word.ToUpperInvariant());
+                }
+            }
+        }
+
+        allWordsUpper = set.ToList();
+    }
+
+    public void GetAllowedNextLetters(string prefix, HashSet<char> result)
+    {
+        if (result == null) return;
+        result.Clear();
+
+        if (string.IsNullOrEmpty(prefix) || allWordsUpper == null || allWordsUpper.Count == 0)
+        {
+            return;
+        }
+
+        string upperPrefix = prefix.ToUpperInvariant();
+        int prefixLen = upperPrefix.Length;
+
+        foreach (var word in allWordsUpper)
+        {
+            if (word.Length <= prefixLen) continue;
+            if (word.StartsWith(upperPrefix))
+            {
+                result.Add(word[prefixLen]);
+            }
+        }
     }
 
     public void SetHighlightLetter(char letter)

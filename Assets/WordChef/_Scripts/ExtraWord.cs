@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
@@ -29,15 +29,25 @@ public class ExtraWord : MonoBehaviour {
         level = GameState.currentLevel;
 
         extraWords = Prefs.GetExtraWords(world, subWorld, level).ToList();
-        existMessage.SetActive(false);
-        existMessageCG = existMessage.GetComponent<CanvasGroup>();
+        if (existMessage != null)
+        {
+            existMessage.SetActive(false);
+            existMessageCG = existMessage.GetComponent<CanvasGroup>();
+        }
+        else
+        {
+            Debug.LogWarning("ExtraWord: existMessage is not assigned. Duplicate message will be skipped.");
+        }
 
         UpdateUI();
     }
 
     private void UpdateUI()
     {
-        lightOpenEffect.SetActive(Prefs.extraProgress >= Prefs.extraTarget);
+        if (lightOpenEffect != null)
+        {
+            lightOpenEffect.SetActive(Prefs.extraProgress >= Prefs.extraTarget);
+        }
     }
 
     public void ProcessWorld(string word)
@@ -47,27 +57,37 @@ public class ExtraWord : MonoBehaviour {
             if (isMessageShowing) return;
             isMessageShowing = true;
 
-            ShowMessage("");
+            if (existMessage != null && existMessageCG != null)
+            {
+                ShowMessage("");
+            }
+            else
+            {
+                isMessageShowing = false;
+            }
         }
         else
         {
-            var middlePoint = CUtils.GetMiddlePoint(beginPoint.position, endPoint.position, 0.4f);
-            Vector3[] waypoint = { beginPoint.position, middlePoint, endPoint.position };
+            if (beginPoint != null && endPoint != null && MonoUtils.instance != null && MonoUtils.instance.textFlyTransform != null && TextPreview.instance != null)
+            {
+                var middlePoint = CUtils.GetMiddlePoint(beginPoint.position, endPoint.position, 0.4f);
+                Vector3[] waypoint = { beginPoint.position, middlePoint, endPoint.position };
 
-            flyText = Instantiate(MonoUtils.instance.letter);
-            flyText.text = word;
-            flyText.fontSize = 12;
-            flyText.transform.position = beginPoint.position;
-            flyText.transform.SetParent(MonoUtils.instance.textFlyTransform);
-            flyText.transform.localScale = TextPreview.instance.text.transform.localScale;
-            iTween.MoveTo(flyText.gameObject, iTween.Hash("path", waypoint, "time", 0.3f, "oncomplete", "OnTextMoveToComplete", "oncompletetarget", gameObject));
-
+                flyText = Instantiate(MonoUtils.instance.letter);
+                flyText.text = word;
+                flyText.fontSize = 12;
+                flyText.transform.position = beginPoint.position;
+                flyText.transform.SetParent(MonoUtils.instance.textFlyTransform);
+                flyText.transform.localScale = TextPreview.instance.text.transform.localScale;
+                iTween.MoveTo(flyText.gameObject, iTween.Hash("path", waypoint, "time", 0.3f, "oncomplete", "OnTextMoveToComplete", "oncompletetarget", gameObject));
+            }
             AddNewExtraWord(word);
         }
     }
 
     private void ShowMessage(string message)
     {
+        if (existMessage == null || existMessageCG == null) return;
         existMessage.SetActive(true);
         existMessageCG.alpha = 0;
         iTween.ValueTo(gameObject, iTween.Hash("from", 0, "to", 1, "time", 0.3f, "OnUpdate", "OnMessageUpdate", "oncomplete", "OnMessageShowComplete"));
@@ -83,6 +103,7 @@ public class ExtraWord : MonoBehaviour {
 
     private void OnMessageUpdate(float value)
     {
+        if (existMessageCG == null) return;
         existMessageCG.alpha = value;
     }
 
@@ -103,19 +124,35 @@ public class ExtraWord : MonoBehaviour {
     {
         UpdateUI();
 
+        if (lightOpenEffect == null || lightEffect == null)
+        {
+            if (flyText != null)
+            {
+                flyText.CrossFadeAlpha(0, 0.3f, true);
+                Destroy(flyText.gameObject, 0.3f);
+            }
+            return;
+        }
+
         if (!lightOpenEffect.activeSelf)
         {
             lightEffect.SetActive(true);
             iTween.RotateAdd(lightEffect, iTween.Hash("z", -60, "time", 0.4f, "oncomplete", "OnLightRotateComplete", "oncompletetarget", gameObject));
         }
 
-        flyText.CrossFadeAlpha(0, 0.3f, true);
-        Destroy(flyText.gameObject, 0.3f);
+        if (flyText != null)
+        {
+            flyText.CrossFadeAlpha(0, 0.3f, true);
+            Destroy(flyText.gameObject, 0.3f);
+        }
     }
 
     private void OnLightRotateComplete()
     {
-        lightEffect.SetActive(false);
+        if (lightEffect != null)
+        {
+            lightEffect.SetActive(false);
+        }
     }
 
     public void OnClaimed()

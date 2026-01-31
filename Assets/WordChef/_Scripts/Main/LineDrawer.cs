@@ -16,6 +16,9 @@ public class LineDrawer : MonoBehaviour {
 
     private bool isDragging;
     private float RADIUS = 0.35f;
+    [Range(0.05f, 1f)]
+    public float nonMatchRadiusCoef = 0.2f;
+    private readonly HashSet<char> allowedNextLetters = new HashSet<char>();
 
     private void Awake()
     {
@@ -59,10 +62,20 @@ public class LineDrawer : MonoBehaviour {
             mousePoint = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             mousePoint.z = 90;
 
-            int nearest = GetNearestPosition(mousePoint, letterPositions);
-            Vector3 letterPosition = letterPositions[nearest];
-            if (Vector3.Distance(letterPosition, mousePoint) < RADIUS)
+            HashSet<char> allowedNext = null;
+            if (WordRegion.instance != null && currentIndexes.Count > 0)
             {
+                WordRegion.instance.GetAllowedNextLetters(textPreview.GetText(), allowedNextLetters);
+                if (allowedNextLetters.Count > 0)
+                {
+                    allowedNext = allowedNextLetters;
+                }
+            }
+
+            int nearest = GetNearestPosition(mousePoint, letterPositions, allowedNext);
+            if (nearest != -1)
+            {
+                Vector3 letterPosition = letterPositions[nearest];
                 if (currentIndexes.Count >= 2 && currentIndexes[currentIndexes.Count - 2] == nearest)
                 {
                     currentIndexes.RemoveAt(currentIndexes.Count - 1);
@@ -96,20 +109,37 @@ public class LineDrawer : MonoBehaviour {
         }
     }
 
-    private int GetNearestPosition(Vector3 point, List<Vector3> letters)
+    private int GetNearestPosition(Vector3 point, List<Vector3> letters, HashSet<char> allowedNext)
     {
         float min = float.MaxValue;
         int index = -1;
         for(int i = 0; i < letters.Count; i++)
         {
             float distant = Vector3.Distance(point, letters[i]);
-            if (distant < min)
+            float radius = RADIUS;
+            if (allowedNext != null && allowedNext.Count > 0)
+            {
+                char letter = GetLetterAtIndex(i);
+                if (letter == '\0' || !allowedNext.Contains(letter))
+                {
+                    radius = RADIUS * nonMatchRadiusCoef;
+                }
+            }
+
+            if (distant <= radius && distant < min)
             {
                 min = distant;
                 index = i;
             }
         }
         return index;
+    }
+
+    private char GetLetterAtIndex(int index)
+    {
+        if (string.IsNullOrEmpty(textPreview.word)) return '\0';
+        if (index < 0 || index >= textPreview.word.Length) return '\0';
+        return char.ToUpperInvariant(textPreview.word[index]);
     }
 
     private void BuildPoints()
