@@ -29,6 +29,7 @@ public class LineDrawer : MonoBehaviour {
     public Shader lineShader;
     public Shader additiveShader;
     public float goldScrollSpeed = 0.15f;
+    public float goldTiling = 2f;
     [Range(0.05f, 2f)]
     public float shimmerWidthCoef = 0.65f;
     public float shimmerScrollSpeed = 0.6f;
@@ -214,6 +215,7 @@ public class LineDrawer : MonoBehaviour {
             if (goldLineMaterial != null)
             {
                 lineRenderer.material = goldLineMaterial;
+                lineRenderer.material.mainTextureScale = new Vector2(goldTiling, 1f);
             }
         }
 

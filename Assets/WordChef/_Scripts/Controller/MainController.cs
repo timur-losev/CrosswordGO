@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -39,8 +39,23 @@ public class MainController : BaseController {
             return;
         }
 
-        Pan.instance.Load(gameLevel);
-        WordRegion.instance.Load(gameLevel);
+        if (Pan.instance != null)
+        {
+            Pan.instance.Load(gameLevel);
+        }
+        else
+        {
+            Debug.LogWarning("MainController: Pan instance is missing in scene.");
+        }
+
+        if (WordRegion.instance != null)
+        {
+            WordRegion.instance.Load(gameLevel);
+        }
+        else
+        {
+            Debug.LogWarning("MainController: WordRegion instance is missing in scene.");
+        }
 
         if (world == 0 && subWorld == 0 && level == 0)
         {
@@ -50,7 +65,10 @@ public class MainController : BaseController {
             });
         }
 
-        levelNameText.text = GameState.currentSubWorldName + " - " + (level + 1);
+        if (levelNameText != null)
+        {
+            levelNameText.text = GameState.currentSubWorldName + " - " + (level + 1);
+        }
     }
 
     public void OnComplete()

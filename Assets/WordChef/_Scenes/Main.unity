@@ -296,7 +296,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -237}
+  m_AnchoredPosition: {x: 0, y: -300}
   m_SizeDelta: {x: 304, y: 299}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &153323520
@@ -520,7 +520,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0.50980395}
+  m_Color: {r: 0.32922268, g: 0, b: 1, a: 0.50980395}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1592,26 +1592,8 @@ LineRenderer:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
-        time: 0
-        value: 0.3243243
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.3560271
-        value: 0.32595727
-        inSlope: 0.0077458024
-        outSlope: 0.0077458024
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0.33333334
-        outWeight: 0.33333334
-      - serializedVersion: 3
         time: 1
-        value: 0.32995504
+        value: 0.6074361
         inSlope: 0
         outSlope: 0
         tangentMode: 0
@@ -1654,7 +1636,7 @@ LineRenderer:
     numCornerVertices: 10
     numCapVertices: 0
     alignment: 0
-    textureMode: 0
+    textureMode: 3
     textureScale: {x: 1, y: 1}
     shadowBias: 0
     generateLightingData: 0
@@ -1681,22 +1663,25 @@ MonoBehaviour:
   textPreview: {fileID: 1179100840}
   shimmerLineRenderer: {fileID: 0}
   nonMatchRadiusCoef: 0.2
-  goldLineTexture: {fileID: 2800000, guid: a15e0befcb0efb742bfb987887e3479f, type: 3}
+  goldLineTexture: {fileID: 2800000, guid: 326b72d60f90cb64aa7b0d3a0635fc5b, type: 3}
   goldLineMaterial: {fileID: 2100000, guid: 2201deea25a3d364e8df7c1dba813ed2, type: 2}
-  shimmerTexture: {fileID: 2800000, guid: 14806cc82d87a2e46b35937aba610bff, type: 3}
-  shimmerLineMaterial: {fileID: 2100000, guid: 5552453ce53e1a54ca4c02cb00a7e0e9, type: 2}
+  shimmerTexture: {fileID: 0}
+  shimmerLineMaterial: {fileID: 0}
   lineShader: {fileID: 10750, guid: 0000000000000000f000000000000000, type: 0}
   additiveShader: {fileID: 211, guid: 0000000000000000f000000000000000, type: 0}
-  shimmerWidthCoef: 1.7
+  goldScrollSpeed: 0.55
+  goldTiling: 1
+  shimmerWidthCoef: 1.178
   shimmerScrollSpeed: 0.3
-  shimmerTiling: 2
+  shimmerTiling: 0.5
   starSprite: {fileID: 21300000, guid: d06b73e47c2ca1541b1633e997430b14, type: 3}
   starMaterial: {fileID: 2100000, guid: 5ae72a34ce6fea54d872ba4a635a44ac, type: 2}
-  starColor: {r: 1, g: 0.92, b: 0.65, a: 1}
-  starSpacing: 0.25
-  starSize: 0.03
+  starColor: {r: 1, g: 0.6509804, b: 0.9180351, a: 1}
+  starSpacing: 0.77
+  starSpacingJitter: 0
+  starSize: 0.08
   starAlphaMin: 0.35
-  starAlphaMax: 0.9
+  starAlphaMax: 0.8
   starFlickerSpeed: 3
 --- !u!4 &1307809752
 Transform:
