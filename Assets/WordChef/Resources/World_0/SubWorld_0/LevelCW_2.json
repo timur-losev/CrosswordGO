@@ -1,28 +1,40 @@
 {
     "CrosswordConfigs": [
         {
-            "Answer": "rain",
-            "XPos": 11,
-            "YPos": 8,
+            "Answer": "sent",
+            "XPos": 2,
+            "YPos": 2,
             "Direction": 0
         },
         {
-            "Answer": "hair",
-            "XPos": 11,
-            "YPos": 5,
+            "Answer": "est",
+            "XPos": 5,
+            "YPos": 0,
             "Direction": 1
         },
         {
-            "Answer": "era",
-            "XPos": 9,
-            "YPos": 6,
+            "Answer": "nut",
+            "XPos": 4,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "sun",
+            "XPos": 2,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "ten",
+            "XPos": 0,
+            "YPos": 4,
             "Direction": 0
         },
         {
-            "Answer": "air",
-            "XPos": 12,
-            "YPos": 8,
-            "Direction": 1
+            "Answer": "use",
+            "XPos": 3,
+            "YPos": 0,
+            "Direction": 0
         }
     ]
 }

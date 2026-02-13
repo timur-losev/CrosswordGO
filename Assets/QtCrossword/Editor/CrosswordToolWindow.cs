@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ namespace QtCrossword.EditorTools
     public sealed class CrosswordToolWindow : EditorWindow
     {
         private const string DefaultStorageFolder = "Assets/WordChef/Resources/World_0/SubWorld_0";
+        private const string EnglishWordsFolder = "Assets/WordChef/10000 English Words";
 
         private string inputText =
             "PYTHON\nWIDGET\nBUTTON\nLAYOUT\nRANDOM\nCROSSWORD";
@@ -23,12 +25,33 @@ namespace QtCrossword.EditorTools
         private int rotationSteps;
         private Vector2 gridScroll;
         private string statusText = "Ready.";
+        private string uniqueLettersText = "Unique letters: -";
         private string storageFolder = DefaultStorageFolder;
         private List<string> jsonFileNames = new List<string>();
         private int selectedJsonFileIndex = -1;
         private string saveFileName = "LevelCW_0.json";
         private int saveOffsetX;
         private int saveOffsetY;
+        private int requestedWords3;
+        private int requestedWords4;
+        private int requestedWords5;
+        private int requestedWords6;
+        private int requestedWords7;
+        private int targetConstraintUniqueLetters = 12;
+        private int targetConstraintUniqueLettersSpread;
+        private bool discardUsedWords;
+        private string constraintStatusText = "Constraint mode: disabled (using input text).";
+        private ConstraintWordSelectionResult lastConstraintResult;
+        private bool wordPoolsLoaded;
+        private readonly Dictionary<int, List<string>> wordPoolsByLength = new Dictionary<int, List<string>>();
+        private readonly Dictionary<int, string> wordListFileNames = new Dictionary<int, string>
+        {
+            { 3, "3_letters.txt" },
+            { 4, "4_letters.txt" },
+            { 5, "5_letters.txt" },
+            { 6, "6_letters.txt" },
+            { 7, "7_letters.txt" }
+        };
 
         private GUIStyle statusStyle;
         private GUIStyle cellStyle;
@@ -58,6 +81,7 @@ namespace QtCrossword.EditorTools
             maxVariants = Mathf.Max(1, EditorGUILayout.IntField("Max Variants", maxVariants));
             maxNodes = Mathf.Max(1, EditorGUILayout.IntField("Max Nodes", maxNodes));
             EditorGUILayout.EndHorizontal();
+            DrawConstraintSection();
 
             EditorGUILayout.Space(6f);
             if (GUILayout.Button("Generate crossword", GUILayout.Height(28f)))
@@ -71,6 +95,8 @@ namespace QtCrossword.EditorTools
 
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField(statusText, statusStyle);
+            EditorGUILayout.LabelField(uniqueLettersText, statusStyle);
+            EditorGUILayout.LabelField(constraintStatusText, statusStyle);
             EditorGUILayout.Space(8f);
 
             DrawGridArea();
@@ -114,6 +140,42 @@ namespace QtCrossword.EditorTools
             GUILayout.FlexibleSpace();
             GUILayout.Label("Rotation: " + (rotationSteps * 90) + "°", EditorStyles.label, GUILayout.Width(280f));
             EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawConstraintSection()
+        {
+            EditorGUILayout.Space(6f);
+            EditorGUILayout.LabelField("Word Constraints (optional)", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "If any count is > 0, the tool builds words from 3-7 letter lists and ignores manual input text.",
+                MessageType.None
+            );
+
+            EditorGUILayout.BeginHorizontal();
+            requestedWords3 = Mathf.Max(0, EditorGUILayout.IntField("3 letters", requestedWords3));
+            requestedWords4 = Mathf.Max(0, EditorGUILayout.IntField("4 letters", requestedWords4));
+            requestedWords5 = Mathf.Max(0, EditorGUILayout.IntField("5 letters", requestedWords5));
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            requestedWords6 = Mathf.Max(0, EditorGUILayout.IntField("6 letters", requestedWords6));
+            requestedWords7 = Mathf.Max(0, EditorGUILayout.IntField("7 letters", requestedWords7));
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.BeginHorizontal();
+            targetConstraintUniqueLetters = Mathf.Clamp(
+                EditorGUILayout.IntField("Target unique letters", targetConstraintUniqueLetters),
+                0,
+                26
+            );
+            targetConstraintUniqueLettersSpread = Mathf.Clamp(
+                EditorGUILayout.IntField("± spread", targetConstraintUniqueLettersSpread),
+                0,
+                26
+            );
+            EditorGUILayout.EndHorizontal();
+
+            discardUsedWords = EditorGUILayout.ToggleLeft("Discard used words (scan current storage folder JSON)", discardUsedWords);
         }
 
         private void DrawStorageSection()
@@ -254,6 +316,123 @@ namespace QtCrossword.EditorTools
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        private bool HasConstraintRequest()
+        {
+            return TotalConstraintWordsRequested() > 0;
+        }
+
+        private int TotalConstraintWordsRequested()
+        {
+            return requestedWords3 + requestedWords4 + requestedWords5 + requestedWords6 + requestedWords7;
+        }
+
+        private void EnsureWordPoolsLoaded()
+        {
+            if (wordPoolsLoaded)
+            {
+                return;
+            }
+
+            wordPoolsByLength.Clear();
+            string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+
+            foreach (KeyValuePair<int, string> pair in wordListFileNames)
+            {
+                int length = pair.Key;
+                string relativeFilePath = Path.Combine(EnglishWordsFolder, pair.Value);
+                string absolutePath = Path.GetFullPath(Path.Combine(projectRoot, relativeFilePath));
+                List<string> words = new List<string>();
+
+                if (File.Exists(absolutePath))
+                {
+                    string[] lines = File.ReadAllLines(absolutePath);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string line = lines[i];
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        words.Add(line.Trim().ToUpperInvariant());
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("Word list not found: " + absolutePath);
+                }
+
+                wordPoolsByLength[length] = words;
+            }
+
+            wordPoolsLoaded = true;
+        }
+
+        private HashSet<string> CollectUsedWordsFromStorageFolder()
+        {
+            HashSet<string> usedWords = new HashSet<string>(StringComparer.Ordinal);
+            string absoluteFolder = GetAbsoluteStorageFolder();
+            if (string.IsNullOrWhiteSpace(absoluteFolder) || !Directory.Exists(absoluteFolder))
+            {
+                return usedWords;
+            }
+
+            string[] files = Directory.GetFiles(absoluteFolder, "*.json", SearchOption.TopDirectoryOnly);
+            for (int i = 0; i < files.Length; i++)
+            {
+                try
+                {
+                    string json = File.ReadAllText(files[i]);
+                    CrosswordData data = JsonUtility.FromJson<CrosswordData>(json);
+                    if (data == null || data.CrosswordConfigs == null)
+                    {
+                        continue;
+                    }
+
+                    for (int j = 0; j < data.CrosswordConfigs.Count; j++)
+                    {
+                        CrosswordConfig config = data.CrosswordConfigs[j];
+                        if (config == null || string.IsNullOrWhiteSpace(config.Answer))
+                        {
+                            continue;
+                        }
+
+                        usedWords.Add(config.Answer.Trim().ToUpperInvariant());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("Skipping unreadable JSON file: " + files[i] + " (" + ex.Message + ")");
+                }
+            }
+
+            return usedWords;
+        }
+
+        private ConstraintWordSelectionResult BuildConstraintSelection()
+        {
+            EnsureWordPoolsLoaded();
+            HashSet<string> usedWordsFromStorage = CollectUsedWordsFromStorageFolder();
+
+            ConstraintWordSelectionRequest request = new ConstraintWordSelectionRequest
+            {
+                Count3 = requestedWords3,
+                Count4 = requestedWords4,
+                Count5 = requestedWords5,
+                Count6 = requestedWords6,
+                Count7 = requestedWords7,
+                TargetUniqueLetters = targetConstraintUniqueLetters,
+                TargetUniqueLettersSpread = targetConstraintUniqueLettersSpread,
+                MaxSearchNodes = Math.Max(5000, maxNodes),
+                MaxBranching = 40,
+                WordPoolsByLength = wordPoolsByLength,
+                PreviouslyUsedWords = usedWordsFromStorage,
+                ExcludedWords = discardUsedWords ? usedWordsFromStorage : new HashSet<string>(StringComparer.Ordinal)
+            };
+
+            return ConstraintWordPicker.SelectWords(request);
         }
 
         private void RefreshJsonFiles()
@@ -654,7 +833,49 @@ namespace QtCrossword.EditorTools
 
         private void OnGenerateClicked()
         {
-            List<string> words = CrosswordWordParser.ParseWords(inputText);
+            List<string> words;
+            lastConstraintResult = null;
+            constraintStatusText = "Constraint mode: disabled (using input text).";
+
+            if (HasConstraintRequest())
+            {
+                ConstraintWordSelectionResult constraintResult = BuildConstraintSelection();
+                lastConstraintResult = constraintResult;
+                if (!constraintResult.Success)
+                {
+                    constraintStatusText = "Constraint mode failed: " + constraintResult.Diagnostics;
+                    EditorUtility.DisplayDialog(
+                        "Constraint selection failed",
+                        constraintResult.Diagnostics,
+                        "OK"
+                    );
+                    return;
+                }
+
+                words = new List<string>(constraintResult.SelectedWords);
+                inputText = string.Join("\n", words.ToArray());
+                string targetText = constraintResult.TargetUniqueLetters.ToString();
+                if (constraintResult.TargetUniqueLettersSpread > 0)
+                {
+                    targetText = targetText + " ±" + constraintResult.TargetUniqueLettersSpread;
+                }
+                constraintStatusText =
+                    "Constraint mode: target " + targetText +
+                    ", achieved " + constraintResult.AchievedUniqueLetters +
+                    ", range delta " + constraintResult.Delta +
+                    ", center delta " + constraintResult.CenterDelta +
+                    ", nodes " + constraintResult.VisitedNodes +
+                    (discardUsedWords ? ", discard used words ON." : ", discard used words OFF.");
+                if (constraintResult.SearchTruncated)
+                {
+                    constraintStatusText += " Search truncated.";
+                }
+            }
+            else
+            {
+                words = CrosswordWordParser.ParseWords(inputText);
+            }
+
             if (words.Count < 2)
             {
                 EditorUtility.DisplayDialog(
@@ -732,6 +953,7 @@ namespace QtCrossword.EditorTools
             if (currentVariants.Count == 0)
             {
                 statusText = "Ready.";
+                uniqueLettersText = "Unique letters: -";
                 Repaint();
                 return;
             }
@@ -740,6 +962,7 @@ namespace QtCrossword.EditorTools
             currentVariantIndex = Mod(index, total);
             CrosswordResult result = currentVariants[currentVariantIndex];
             UpdateStatusLabel(result);
+            UpdateUniqueLettersLabel(result);
             Repaint();
         }
 
@@ -758,6 +981,50 @@ namespace QtCrossword.EditorTools
                 "Intersections: " + result.Intersections + ". " +
                 "Rotation: " + rotationAngle + "°. " +
                 skippedText + limitNote;
+        }
+
+        private void UpdateUniqueLettersLabel(CrosswordResult result)
+        {
+            if (result == null || result.Grid == null || result.Grid.Count == 0)
+            {
+                uniqueLettersText = "Unique letters: -";
+                return;
+            }
+
+            Dictionary<GridCoordinate, char> displayGrid = RotatedGrid(result.Grid);
+            if (displayGrid == null || displayGrid.Count == 0)
+            {
+                uniqueLettersText = "Unique letters: -";
+                return;
+            }
+
+            HashSet<char> seen = new HashSet<char>();
+            foreach (KeyValuePair<GridCoordinate, char> pair in displayGrid)
+            {
+                if (pair.Value == '\0') continue;
+                seen.Add(char.ToUpperInvariant(pair.Value));
+            }
+
+            if (seen.Count == 0)
+            {
+                uniqueLettersText = "Unique letters: -";
+                return;
+            }
+
+            List<char> letters = new List<char>(seen);
+            letters.Sort();
+
+            StringBuilder sb = new StringBuilder("Unique letters: ");
+            for (int i = 0; i < letters.Count; i++)
+            {
+                if (i > 0)
+                {
+                    sb.Append(' ');
+                }
+                sb.Append(letters[i]);
+            }
+
+            uniqueLettersText = sb.ToString();
         }
 
         private string GetVariantLabelText()

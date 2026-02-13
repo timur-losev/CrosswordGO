@@ -25,6 +25,13 @@
 
 # Visual Studio cache directory
 .vs/
+.venv/
+**/__pycache__/
+*.pyc
+
+# WordChef python utility runtime artifacts
+/Utils/WorldChef/logs/
+/Utils/WorldChef/.cache/
 
 # Gradle cache directory
 .gradle/

@@ -190,7 +190,7 @@ namespace QtCrossword
         private void ApplyEmptyState()
         {
             SetText(variantLabel, "Variant: -/-");
-            SetText(rotationLabel, "Rotation: 0°");
+            SetText(rotationLabel, "Rotation: 0ss°");
             SetButtonEnabled(previousButton, false);
             SetButtonEnabled(nextButton, false);
             SetButtonEnabled(rotateLeftButton, false);
@@ -241,6 +241,7 @@ namespace QtCrossword
                 skippedText + limitNote
             );
         }
+
 
         private void UpdateRotationLabel()
         {

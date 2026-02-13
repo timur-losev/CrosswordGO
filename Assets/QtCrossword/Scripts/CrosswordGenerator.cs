@@ -58,6 +58,766 @@ namespace QtCrossword
         }
     }
 
+    public sealed class ConstraintWordSelectionRequest
+    {
+        public int Count3;
+        public int Count4;
+        public int Count5;
+        public int Count6;
+        public int Count7;
+        public int TargetUniqueLetters = 12;
+        public int TargetUniqueLettersSpread;
+        public int MaxSearchNodes = 120000;
+        public int MaxBranching = 40;
+        public Dictionary<int, List<string>> WordPoolsByLength = new Dictionary<int, List<string>>();
+        public HashSet<string> ExcludedWords = new HashSet<string>(StringComparer.Ordinal);
+        public HashSet<string> PreviouslyUsedWords = new HashSet<string>(StringComparer.Ordinal);
+
+        public int GetRequestedCount(int length)
+        {
+            switch (length)
+            {
+                case 3:
+                    return Math.Max(0, Count3);
+                case 4:
+                    return Math.Max(0, Count4);
+                case 5:
+                    return Math.Max(0, Count5);
+                case 6:
+                    return Math.Max(0, Count6);
+                case 7:
+                    return Math.Max(0, Count7);
+                default:
+                    return 0;
+            }
+        }
+
+        public int TotalRequestedCount
+        {
+            get
+            {
+                return
+                    Math.Max(0, Count3) +
+                    Math.Max(0, Count4) +
+                    Math.Max(0, Count5) +
+                    Math.Max(0, Count6) +
+                    Math.Max(0, Count7);
+            }
+        }
+    }
+
+    public sealed class ConstraintWordSelectionResult
+    {
+        public bool HasRequest { get; private set; }
+        public bool Success { get; private set; }
+        public bool SearchTruncated { get; private set; }
+        public List<string> SelectedWords { get; private set; }
+        public int TargetUniqueLetters { get; private set; }
+        public int TargetUniqueLettersSpread { get; private set; }
+        public int AchievedUniqueLetters { get; private set; }
+        public int Delta { get; private set; }
+        public int CenterDelta { get; private set; }
+        public int VisitedNodes { get; private set; }
+        public string Diagnostics { get; private set; }
+        public Dictionary<int, int> RequestedByLength { get; private set; }
+        public Dictionary<int, int> AvailableByLength { get; private set; }
+
+        public ConstraintWordSelectionResult(
+            bool hasRequest,
+            bool success,
+            bool searchTruncated,
+            List<string> selectedWords,
+            int targetUniqueLetters,
+            int achievedUniqueLetters,
+            int delta,
+            int visitedNodes,
+            string diagnostics,
+            Dictionary<int, int> requestedByLength,
+            Dictionary<int, int> availableByLength,
+            int targetUniqueLettersSpread = 0,
+            int centerDelta = 0
+        )
+        {
+            HasRequest = hasRequest;
+            Success = success;
+            SearchTruncated = searchTruncated;
+            SelectedWords = selectedWords ?? new List<string>();
+            TargetUniqueLetters = targetUniqueLetters;
+            TargetUniqueLettersSpread = targetUniqueLettersSpread;
+            AchievedUniqueLetters = achievedUniqueLetters;
+            Delta = delta;
+            CenterDelta = centerDelta;
+            VisitedNodes = visitedNodes;
+            Diagnostics = diagnostics ?? string.Empty;
+            RequestedByLength = requestedByLength ?? new Dictionary<int, int>();
+            AvailableByLength = availableByLength ?? new Dictionary<int, int>();
+        }
+    }
+
+    public static class ConstraintWordPicker
+    {
+        private sealed class WordEntry
+        {
+            public string Word;
+            public int Length;
+            public uint LetterMask;
+            public int UniqueLetterCount;
+            public bool WasUsedPreviously;
+            public int FrequencyRank;
+
+            public WordEntry(
+                string word,
+                int length,
+                uint letterMask,
+                int uniqueLetterCount,
+                bool wasUsedPreviously,
+                int frequencyRank
+            )
+            {
+                Word = word;
+                Length = length;
+                LetterMask = letterMask;
+                UniqueLetterCount = uniqueLetterCount;
+                WasUsedPreviously = wasUsedPreviously;
+                FrequencyRank = frequencyRank;
+            }
+        }
+
+        private struct RankedCandidate
+        {
+            public WordEntry Entry;
+            public int Score;
+            public int RangeDelta;
+            public int CenterDelta;
+            public int NewLetters;
+            public int FrequencyRank;
+            public bool WasUsedPreviously;
+        }
+
+        public static ConstraintWordSelectionResult SelectWords(ConstraintWordSelectionRequest request)
+        {
+            Dictionary<int, int> requestedByLength = BuildRequestedByLength(request);
+            Dictionary<int, int> availableByLength = new Dictionary<int, int>();
+
+            if (request == null)
+            {
+                return new ConstraintWordSelectionResult(
+                    false,
+                    false,
+                    false,
+                    new List<string>(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    "Constraint request is null.",
+                    requestedByLength,
+                    availableByLength
+                );
+            }
+
+            int totalRequested = request.TotalRequestedCount;
+            if (totalRequested == 0)
+            {
+                return new ConstraintWordSelectionResult(
+                    false,
+                    false,
+                    false,
+                    new List<string>(),
+                    request.TargetUniqueLetters,
+                    0,
+                    0,
+                    0,
+                    "No constrained word counts were requested.",
+                    requestedByLength,
+                    availableByLength
+                );
+            }
+
+            if (totalRequested < 2)
+            {
+                return new ConstraintWordSelectionResult(
+                    true,
+                    false,
+                    false,
+                    new List<string>(),
+                    request.TargetUniqueLetters,
+                    0,
+                    0,
+                    0,
+                    "At least two words are required to build a crossword.",
+                    requestedByLength,
+                    availableByLength
+                );
+            }
+
+            int targetUniqueLetters = Clamp(request.TargetUniqueLetters, 0, 26);
+            int targetUniqueLettersSpread = Clamp(request.TargetUniqueLettersSpread, 0, 26);
+            int minTargetUniqueLetters = Clamp(targetUniqueLetters - targetUniqueLettersSpread, 0, 26);
+            int maxTargetUniqueLetters = Clamp(targetUniqueLetters + targetUniqueLettersSpread, 0, 26);
+            int maxNodes = Math.Max(2000, request.MaxSearchNodes);
+            int maxBranching = Math.Max(8, request.MaxBranching);
+
+            HashSet<string> excludedWords = new HashSet<string>(StringComparer.Ordinal);
+            if (request.ExcludedWords != null)
+            {
+                foreach (string item in request.ExcludedWords)
+                {
+                    if (string.IsNullOrWhiteSpace(item))
+                    {
+                        continue;
+                    }
+
+                    excludedWords.Add(item.Trim().ToUpperInvariant());
+                }
+            }
+
+            HashSet<string> previouslyUsedWords = new HashSet<string>(StringComparer.Ordinal);
+            if (request.PreviouslyUsedWords != null)
+            {
+                foreach (string item in request.PreviouslyUsedWords)
+                {
+                    if (string.IsNullOrWhiteSpace(item))
+                    {
+                        continue;
+                    }
+
+                    previouslyUsedWords.Add(item.Trim().ToUpperInvariant());
+                }
+            }
+
+            Dictionary<int, List<WordEntry>> poolsByLength = new Dictionary<int, List<WordEntry>>();
+            Dictionary<string, WordEntry> entryByWord = new Dictionary<string, WordEntry>(StringComparer.Ordinal);
+            for (int length = 3; length <= 7; length++)
+            {
+                int requestedCount = request.GetRequestedCount(length);
+                List<string> source = null;
+                if (request.WordPoolsByLength != null)
+                {
+                    request.WordPoolsByLength.TryGetValue(length, out source);
+                }
+
+                List<WordEntry> filtered = FilterWordPool(source, length, excludedWords, previouslyUsedWords);
+                poolsByLength[length] = filtered;
+                availableByLength[length] = filtered.Count;
+                for (int i = 0; i < filtered.Count; i++)
+                {
+                    entryByWord[filtered[i].Word] = filtered[i];
+                }
+
+                if (requestedCount > filtered.Count)
+                {
+                    return new ConstraintWordSelectionResult(
+                        true,
+                        false,
+                        false,
+                        new List<string>(),
+                        targetUniqueLetters,
+                        0,
+                        0,
+                        0,
+                        "Not enough available words of length " + length +
+                        ". Requested: " + requestedCount + ", available: " + filtered.Count + ".",
+                        requestedByLength,
+                        availableByLength
+                    );
+                }
+            }
+
+            List<int> slotLengths = new List<int>(totalRequested);
+            for (int length = 3; length <= 7; length++)
+            {
+                int requestedCount = request.GetRequestedCount(length);
+                for (int i = 0; i < requestedCount; i++)
+                {
+                    slotLengths.Add(length);
+                }
+            }
+
+            slotLengths.Sort(delegate (int left, int right)
+            {
+                int leftPool = availableByLength[left];
+                int rightPool = availableByLength[right];
+                int poolCompare = leftPool.CompareTo(rightPool);
+                if (poolCompare != 0)
+                {
+                    return poolCompare;
+                }
+
+                return right.CompareTo(left);
+            });
+
+            bool stopSearch = false;
+            bool searchTruncated = false;
+            int visitedNodes = 0;
+            int bestRangeDelta = int.MaxValue;
+            int bestCenterDelta = int.MaxValue;
+            int bestUsedPreviouslyCount = int.MaxValue;
+            int bestFrequencyRankSum = int.MaxValue;
+            int bestUniqueLetters = -1;
+            string bestSignature = null;
+            List<string> bestSelected = null;
+
+            List<string> selectedWords = new List<string>(totalRequested);
+            HashSet<string> usedWords = new HashSet<string>(StringComparer.Ordinal);
+
+            void CommitBest(uint letterMask, List<string> selected)
+            {
+                int achievedUnique = PopCount(letterMask);
+                int rangeDelta = DistanceToRange(achievedUnique, minTargetUniqueLetters, maxTargetUniqueLetters);
+                int centerDelta = Math.Abs(targetUniqueLetters - achievedUnique);
+                int usedPreviouslyCount = 0;
+                int frequencyRankSum = 0;
+                for (int i = 0; i < selected.Count; i++)
+                {
+                    WordEntry metadata;
+                    if (entryByWord.TryGetValue(selected[i], out metadata))
+                    {
+                        if (metadata.WasUsedPreviously)
+                        {
+                            usedPreviouslyCount++;
+                        }
+                        frequencyRankSum += metadata.FrequencyRank;
+                    }
+                }
+                string signature = string.Join("|", selected.ToArray());
+
+                bool isBetter = false;
+                if (rangeDelta < bestRangeDelta)
+                {
+                    isBetter = true;
+                }
+                else if (rangeDelta == bestRangeDelta)
+                {
+                    if (centerDelta < bestCenterDelta)
+                    {
+                        isBetter = true;
+                    }
+                    else if (centerDelta == bestCenterDelta)
+                    {
+                        if (usedPreviouslyCount < bestUsedPreviouslyCount)
+                        {
+                            isBetter = true;
+                        }
+                        else if (usedPreviouslyCount == bestUsedPreviouslyCount)
+                        {
+                            if (frequencyRankSum < bestFrequencyRankSum)
+                            {
+                                isBetter = true;
+                            }
+                            else if (frequencyRankSum == bestFrequencyRankSum)
+                            {
+                                if (achievedUnique > bestUniqueLetters)
+                                {
+                                    isBetter = true;
+                                }
+                                else if (achievedUnique == bestUniqueLetters)
+                                {
+                                    if (bestSignature == null || string.CompareOrdinal(signature, bestSignature) < 0)
+                                    {
+                                        isBetter = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!isBetter)
+                {
+                    return;
+                }
+
+                bestRangeDelta = rangeDelta;
+                bestCenterDelta = centerDelta;
+                bestUsedPreviouslyCount = usedPreviouslyCount;
+                bestFrequencyRankSum = frequencyRankSum;
+                bestUniqueLetters = achievedUnique;
+                bestSignature = signature;
+                bestSelected = new List<string>(selected);
+            }
+
+            void Search(int depth, uint currentMask)
+            {
+                if (stopSearch)
+                {
+                    return;
+                }
+
+                visitedNodes++;
+                if (visitedNodes > maxNodes)
+                {
+                    searchTruncated = true;
+                    return;
+                }
+
+                if (depth >= slotLengths.Count)
+                {
+                    CommitBest(currentMask, selectedWords);
+                    return;
+                }
+
+                int currentUnique = PopCount(currentMask);
+                int remainingSlots = slotLengths.Count - depth;
+                int maxPossibleUnique = Math.Min(26, currentUnique + remainingSlots * 7);
+                int optimisticRangeDelta = DistanceBetweenRanges(
+                    currentUnique,
+                    maxPossibleUnique,
+                    minTargetUniqueLetters,
+                    maxTargetUniqueLetters
+                );
+                if (optimisticRangeDelta > bestRangeDelta)
+                {
+                    return;
+                }
+                if (optimisticRangeDelta == bestRangeDelta)
+                {
+                    int optimisticCenterDelta = DistanceToRange(targetUniqueLetters, currentUnique, maxPossibleUnique);
+                    if (optimisticCenterDelta > bestCenterDelta)
+                    {
+                        return;
+                    }
+                }
+
+                int length = slotLengths[depth];
+                List<WordEntry> pool = poolsByLength[length];
+                List<WordEntry> shortlist = BuildShortlist(
+                    pool,
+                    usedWords,
+                    currentMask,
+                    targetUniqueLetters,
+                    minTargetUniqueLetters,
+                    maxTargetUniqueLetters,
+                    maxBranching
+                );
+                for (int i = 0; i < shortlist.Count; i++)
+                {
+                    WordEntry entry = shortlist[i];
+                    selectedWords.Add(entry.Word);
+                    usedWords.Add(entry.Word);
+                    Search(depth + 1, currentMask | entry.LetterMask);
+                    usedWords.Remove(entry.Word);
+                    selectedWords.RemoveAt(selectedWords.Count - 1);
+
+                    if (stopSearch)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            Search(0, 0u);
+
+            if (bestSelected == null || bestSelected.Count == 0)
+            {
+                return new ConstraintWordSelectionResult(
+                    true,
+                    false,
+                    searchTruncated,
+                    new List<string>(),
+                    targetUniqueLetters,
+                    0,
+                    0,
+                    visitedNodes,
+                    "Unable to pick a valid word set under current constraints.",
+                    requestedByLength,
+                    availableByLength,
+                    targetUniqueLettersSpread
+                );
+            }
+
+            bestSelected.Sort(delegate (string left, string right)
+            {
+                int lengthCompare = left.Length.CompareTo(right.Length);
+                if (lengthCompare != 0)
+                {
+                    return lengthCompare;
+                }
+
+                return string.CompareOrdinal(left, right);
+            });
+
+            string targetRangeText;
+            if (targetUniqueLettersSpread > 0)
+            {
+                targetRangeText = targetUniqueLetters + " ±" + targetUniqueLettersSpread +
+                    " (" + minTargetUniqueLetters + "-" + maxTargetUniqueLetters + ")";
+            }
+            else
+            {
+                targetRangeText = targetUniqueLetters.ToString();
+            }
+
+            string diagnostics = "Picked " + bestSelected.Count + " words. " +
+                "Unique letters: " + bestUniqueLetters + "/" + targetRangeText +
+                " (range delta " + bestRangeDelta + ", center delta " + bestCenterDelta + ").";
+            if (searchTruncated)
+            {
+                diagnostics += " Search limit reached.";
+            }
+
+            return new ConstraintWordSelectionResult(
+                true,
+                true,
+                searchTruncated,
+                bestSelected,
+                targetUniqueLetters,
+                bestUniqueLetters,
+                bestRangeDelta,
+                visitedNodes,
+                diagnostics,
+                requestedByLength,
+                availableByLength,
+                targetUniqueLettersSpread,
+                bestCenterDelta
+            );
+        }
+
+        private static Dictionary<int, int> BuildRequestedByLength(ConstraintWordSelectionRequest request)
+        {
+            Dictionary<int, int> result = new Dictionary<int, int>();
+            for (int length = 3; length <= 7; length++)
+            {
+                result[length] = request == null ? 0 : request.GetRequestedCount(length);
+            }
+
+            return result;
+        }
+
+        private static List<WordEntry> FilterWordPool(
+            List<string> source,
+            int expectedLength,
+            HashSet<string> excludedWords,
+            HashSet<string> previouslyUsedWords
+        )
+        {
+            List<WordEntry> result = new List<WordEntry>();
+            if (source == null || source.Count == 0)
+            {
+                return result;
+            }
+
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < source.Count; i++)
+            {
+                string raw = source[i];
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                string word = raw.Trim().ToUpperInvariant();
+                if (word.Length != expectedLength)
+                {
+                    continue;
+                }
+
+                if (excludedWords != null && excludedWords.Contains(word))
+                {
+                    continue;
+                }
+
+                if (seen.Contains(word))
+                {
+                    continue;
+                }
+
+                uint letterMask;
+                if (!TryBuildLetterMask(word, out letterMask))
+                {
+                    continue;
+                }
+
+                seen.Add(word);
+                bool wasUsed = previouslyUsedWords != null && previouslyUsedWords.Contains(word);
+                result.Add(new WordEntry(word, expectedLength, letterMask, PopCount(letterMask), wasUsed, i));
+            }
+
+            return result;
+        }
+
+        private static List<WordEntry> BuildShortlist(
+            List<WordEntry> pool,
+            HashSet<string> usedWords,
+            uint currentMask,
+            int targetUniqueLetters,
+            int minTargetUniqueLetters,
+            int maxTargetUniqueLetters,
+            int maxBranching
+        )
+        {
+            List<RankedCandidate> ranked = new List<RankedCandidate>();
+            for (int i = 0; i < pool.Count; i++)
+            {
+                WordEntry entry = pool[i];
+                if (usedWords.Contains(entry.Word))
+                {
+                    continue;
+                }
+
+                uint mergedMask = currentMask | entry.LetterMask;
+                int achievedUnique = PopCount(mergedMask);
+                int rangeDelta = DistanceToRange(achievedUnique, minTargetUniqueLetters, maxTargetUniqueLetters);
+                int centerDelta = Math.Abs(targetUniqueLetters - achievedUnique);
+                int newLetters = PopCount(entry.LetterMask & ~currentMask);
+                int score = rangeDelta * 1000 + centerDelta * 100;
+
+                ranked.Add(
+                    new RankedCandidate
+                    {
+                        Entry = entry,
+                        Score = score,
+                        RangeDelta = rangeDelta,
+                        CenterDelta = centerDelta,
+                        NewLetters = newLetters,
+                        FrequencyRank = entry.FrequencyRank,
+                        WasUsedPreviously = entry.WasUsedPreviously
+                    }
+                );
+            }
+
+            ranked.Sort(delegate (RankedCandidate left, RankedCandidate right)
+            {
+                int scoreCompare = left.Score.CompareTo(right.Score);
+                if (scoreCompare != 0)
+                {
+                    return scoreCompare;
+                }
+
+                int rangeCompare = left.RangeDelta.CompareTo(right.RangeDelta);
+                if (rangeCompare != 0)
+                {
+                    return rangeCompare;
+                }
+
+                int centerCompare = left.CenterDelta.CompareTo(right.CenterDelta);
+                if (centerCompare != 0)
+                {
+                    return centerCompare;
+                }
+
+                int usedCompare = (left.WasUsedPreviously ? 1 : 0).CompareTo(right.WasUsedPreviously ? 1 : 0);
+                if (usedCompare != 0)
+                {
+                    return usedCompare;
+                }
+
+                int frequencyCompare = left.FrequencyRank.CompareTo(right.FrequencyRank);
+                if (frequencyCompare != 0)
+                {
+                    return frequencyCompare;
+                }
+
+                int gainCompare = right.NewLetters.CompareTo(left.NewLetters);
+                if (gainCompare != 0)
+                {
+                    return gainCompare;
+                }
+
+                return string.CompareOrdinal(left.Entry.Word, right.Entry.Word);
+            });
+
+            int take = ranked.Count;
+            if (take > maxBranching)
+            {
+                take = maxBranching;
+            }
+
+            List<WordEntry> shortlist = new List<WordEntry>(take);
+            for (int i = 0; i < take; i++)
+            {
+                shortlist.Add(ranked[i].Entry);
+            }
+
+            return shortlist;
+        }
+
+        private static bool TryBuildLetterMask(string word, out uint letterMask)
+        {
+            letterMask = 0u;
+            if (string.IsNullOrEmpty(word))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < word.Length; i++)
+            {
+                char letter = char.ToUpperInvariant(word[i]);
+                if (letter < 'A' || letter > 'Z')
+                {
+                    return false;
+                }
+
+                uint bit = 1u << (letter - 'A');
+                if ((letterMask & bit) != 0u)
+                {
+                    return false;
+                }
+
+                letterMask |= bit;
+            }
+
+            return true;
+        }
+
+        private static int PopCount(uint value)
+        {
+            int count = 0;
+            while (value != 0u)
+            {
+                value &= value - 1u;
+                count++;
+            }
+
+            return count;
+        }
+
+        private static int DistanceToRange(int value, int min, int max)
+        {
+            if (value < min)
+            {
+                return min - value;
+            }
+
+            if (value > max)
+            {
+                return value - max;
+            }
+
+            return 0;
+        }
+
+        private static int DistanceBetweenRanges(int minA, int maxA, int minB, int maxB)
+        {
+            if (maxA < minB)
+            {
+                return minB - maxA;
+            }
+
+            if (maxB < minA)
+            {
+                return minA - maxB;
+            }
+
+            return 0;
+        }
+
+        private static int Clamp(int value, int min, int max)
+        {
+            if (value < min)
+            {
+                return min;
+            }
+
+            if (value > max)
+            {
+                return max;
+            }
+
+            return value;
+        }
+    }
+
     public sealed class CrosswordGenerator
     {
         private struct Candidate
