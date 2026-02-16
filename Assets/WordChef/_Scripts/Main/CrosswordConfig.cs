@@ -13,4 +13,5 @@ public class CrosswordConfig
 public class CrosswordData
 {
     public List<CrosswordConfig> CrosswordConfigs;
+    public List<string> HiddenWords;
 }

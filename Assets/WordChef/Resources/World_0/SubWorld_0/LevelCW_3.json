@@ -36,5 +36,22 @@
             "YPos": 0,
             "Direction": 0
         }
+    ],
+    "HiddenWords": [
+        "feng",
+        "fig",
+        "fin",
+        "foe",
+        "fog",
+        "gen",
+        "gin",
+        "gown",
+        "ing",
+        "kin",
+        "king",
+        "wife",
+        "wine",
+        "wing",
+        "woe"
     ]
 }

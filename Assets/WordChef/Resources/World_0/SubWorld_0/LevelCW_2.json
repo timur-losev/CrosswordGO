@@ -1,40 +1,41 @@
 {
     "CrosswordConfigs": [
         {
-            "Answer": "sent",
-            "XPos": 2,
-            "YPos": 2,
-            "Direction": 0
-        },
-        {
-            "Answer": "est",
-            "XPos": 5,
-            "YPos": 0,
-            "Direction": 1
-        },
-        {
-            "Answer": "nut",
-            "XPos": 4,
-            "YPos": 2,
-            "Direction": 1
-        },
-        {
-            "Answer": "sun",
-            "XPos": 2,
-            "YPos": 2,
-            "Direction": 1
-        },
-        {
-            "Answer": "ten",
+            "Answer": "hair",
             "XPos": 0,
-            "YPos": 4,
+            "YPos": 2,
             "Direction": 0
         },
         {
-            "Answer": "use",
-            "XPos": 3,
+            "Answer": "ash",
+            "XPos": 0,
             "YPos": 0,
-            "Direction": 0
+            "Direction": 1
+        },
+        {
+            "Answer": "pain",
+            "XPos": 2,
+            "YPos": 0,
+            "Direction": 1
         }
+    ],
+    "HiddenWords": [
+        "air",
+        "hip",
+        "nap",
+        "pair",
+        "pan",
+        "par",
+        "pin",
+        "rain",
+        "ran",
+        "rap",
+        "rash",
+        "sap",
+        "ship",
+        "sin",
+        "sir",
+        "snap",
+        "span"
     ]
 }

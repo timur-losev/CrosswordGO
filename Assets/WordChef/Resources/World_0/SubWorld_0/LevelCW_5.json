@@ -1,0 +1,38 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "man",
+            "XPos": 2,
+            "YPos": 1,
+            "Direction": 0
+        },
+        {
+            "Answer": "made",
+            "XPos": 2,
+            "YPos": 1,
+            "Direction": 1
+        },
+        {
+            "Answer": "den",
+            "XPos": 1,
+            "YPos": 4,
+            "Direction": 0
+        },
+        {
+            "Answer": "dna",
+            "XPos": 0,
+            "YPos": 2,
+            "Direction": 0
+        },
+        {
+            "Answer": "end",
+            "XPos": 4,
+            "YPos": 0,
+            "Direction": 1
+        }
+    ],
+    "HiddenWords": [
+        "dam",
+        "name"
+    ]
+}

@@ -115,6 +115,15 @@ BLOCKED_WORDS = {
     "your",
     "yours",
     "ser",
+    "ire",
+    "arn",
+    "erg",
+    "alt",
+    "sex",
+    "fan",
+    "gon",
+    "ian",
+    "und",
 }
 
 

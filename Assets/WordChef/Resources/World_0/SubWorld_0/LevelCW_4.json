@@ -1,0 +1,43 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "year",
+            "XPos": 2,
+            "YPos": 2,
+            "Direction": 0
+        },
+        {
+            "Answer": "era",
+            "XPos": 4,
+            "YPos": 0,
+            "Direction": 1
+        },
+        {
+            "Answer": "ray",
+            "XPos": 2,
+            "YPos": 0,
+            "Direction": 1
+        },
+        {
+            "Answer": "war",
+            "XPos": 0,
+            "YPos": 0,
+            "Direction": 0
+        },
+        {
+            "Answer": "way",
+            "XPos": 0,
+            "YPos": 0,
+            "Direction": 1
+        }
+    ],
+    "HiddenWords": [
+        "awe",
+        "aye",
+        "ear",
+        "rye",
+        "ware",
+        "yea",
+        "yer"
+    ]
+}

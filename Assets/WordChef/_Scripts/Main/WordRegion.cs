@@ -11,6 +11,8 @@ public class WordRegion : MonoBehaviour
     private List<string> validWords = new List<string>();
     private Dictionary<Vector2Int, Cell> cellMap = new Dictionary<Vector2Int, Cell>();
     private List<string> allWordsUpper = new List<string>();
+    private HashSet<string> hiddenWords = new HashSet<string>(System.StringComparer.Ordinal);
+    private HashSet<string> collectedHiddenWords = new HashSet<string>(System.StringComparer.Ordinal);
 
     private GameLevel gameLevel;
     private float cellSize;
@@ -42,6 +44,9 @@ public class WordRegion : MonoBehaviour
         this.gameLevel = gameLevel;
         lines.Clear();
         cellMap.Clear();
+        hiddenWords.Clear();
+        collectedHiddenWords.Clear();
+        allWordsUpper.Clear();
 
         // Очистка предыдущих элементов на канвасе, если была перезагрузка
         foreach (Transform child in transform)
@@ -51,11 +56,11 @@ public class WordRegion : MonoBehaviour
 
         var wordList = CUtils.BuildListFromString<string>(this.gameLevel.answers);
         validWords = CUtils.BuildListFromString<string>(this.gameLevel.validWords);
-        BuildAllWords(wordList);
 
         // Загрузка кроссворда из конфигурации
         string configFilePath = GetCrosswordConfigPath(GameState.currentWorld, GameState.currentSubWorld, GameState.currentLevel);
-        var crosswordConfigs = CrosswordLoader.LoadCrosswordConfig(configFilePath);
+        CrosswordData crosswordData = CrosswordLoader.LoadCrosswordData(configFilePath);
+        var crosswordConfigs = crosswordData.CrosswordConfigs;
 
         if (crosswordConfigs == null || crosswordConfigs.Count == 0)
         {
@@ -63,7 +68,8 @@ public class WordRegion : MonoBehaviour
             string fallbackPath = GetCrosswordConfigPath(0, 0, 0);
             if (fallbackPath != configFilePath)
             {
-                crosswordConfigs = CrosswordLoader.LoadCrosswordConfig(fallbackPath);
+                crosswordData = CrosswordLoader.LoadCrosswordData(fallbackPath);
+                crosswordConfigs = crosswordData.CrosswordConfigs;
                 if (crosswordConfigs != null && crosswordConfigs.Count > 0)
                 {
                     Debug.LogWarning($"Crossword config not found for {configFilePath}, using fallback {fallbackPath}");
@@ -76,6 +82,9 @@ public class WordRegion : MonoBehaviour
                 return;
             }
         }
+
+        InitializeHiddenWords(crosswordData.HiddenWords);
+        BuildAllWords(wordList);
 
         // Определение размера сетки на основе максимальных значений XPos и YPos
         minX = crosswordConfigs.Min(c => c.XPos);
@@ -217,7 +226,137 @@ public class WordRegion : MonoBehaviour
             }
         }
 
+        if (hiddenWords != null)
+        {
+            foreach (var hidden in hiddenWords)
+            {
+                if (!string.IsNullOrEmpty(hidden))
+                {
+                    set.Add(hidden.ToUpperInvariant());
+                }
+            }
+        }
+
         allWordsUpper = set.ToList();
+    }
+
+    private void InitializeHiddenWords(List<string> sourceHiddenWords)
+    {
+        hiddenWords.Clear();
+        collectedHiddenWords.Clear();
+
+        if (sourceHiddenWords != null)
+        {
+            foreach (string word in sourceHiddenWords)
+            {
+                if (string.IsNullOrWhiteSpace(word))
+                {
+                    continue;
+                }
+
+                hiddenWords.Add(word.Trim().ToUpperInvariant());
+            }
+        }
+
+        string[] stored = Prefs.GetCollectedHiddenWords(GameState.currentWorld, GameState.currentSubWorld, GameState.currentLevel);
+        if (stored != null)
+        {
+            foreach (string word in stored)
+            {
+                if (string.IsNullOrWhiteSpace(word))
+                {
+                    continue;
+                }
+
+                string normalized = word.Trim().ToUpperInvariant();
+                if (hiddenWords.Contains(normalized))
+                {
+                    collectedHiddenWords.Add(normalized);
+                }
+            }
+        }
+    }
+
+    private void SaveCollectedHiddenWords()
+    {
+        List<string> words = collectedHiddenWords.ToList();
+        words.Sort(System.StringComparer.Ordinal);
+        Prefs.SetCollectedHiddenWords(GameState.currentWorld, GameState.currentSubWorld, GameState.currentLevel, words.ToArray());
+    }
+
+    private bool TryProcessHiddenWord(string checkWord)
+    {
+        if (hiddenWords == null || hiddenWords.Count == 0)
+        {
+            return false;
+        }
+
+        string word = string.IsNullOrEmpty(checkWord) ? string.Empty : checkWord.Trim().ToUpperInvariant();
+        if (word.Length == 0)
+        {
+            return false;
+        }
+
+        string resolvedHiddenWord = ResolveHiddenWord(word);
+        if (string.IsNullOrEmpty(resolvedHiddenWord))
+        {
+            return false;
+        }
+
+        if (collectedHiddenWords.Contains(resolvedHiddenWord))
+        {
+            textPreview.SetExistColor();
+            if (Toast.instance != null)
+            {
+                Toast.instance.ShowMessage("hidden word already collected");
+            }
+            return true;
+        }
+
+        collectedHiddenWords.Add(resolvedHiddenWord);
+        SaveCollectedHiddenWords();
+        CurrencyController.CreditBalance(Const.HIDDEN_WORD_REWARD_POINTS);
+        textPreview.SetText("hidden word collected");
+        if (Toast.instance != null)
+        {
+            Toast.instance.ShowMessage("hidden word collected +" + Const.HIDDEN_WORD_REWARD_POINTS + " points");
+        }
+        textPreview.SetValidColor();
+        Sound.instance.Play(Sound.Others.Match);
+        return true;
+    }
+
+    private string ResolveHiddenWord(string inputWordUpper)
+    {
+        if (string.IsNullOrEmpty(inputWordUpper))
+        {
+            return string.Empty;
+        }
+
+        if (hiddenWords.Contains(inputWordUpper))
+        {
+            return inputWordUpper;
+        }
+
+        string reversed = ReverseWord(inputWordUpper);
+        if (!string.IsNullOrEmpty(reversed) && hiddenWords.Contains(reversed))
+        {
+            return reversed;
+        }
+
+        return string.Empty;
+    }
+
+    private static string ReverseWord(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        char[] chars = value.ToCharArray();
+        System.Array.Reverse(chars);
+        return new string(chars);
     }
 
     public void GetAllowedNextLetters(string prefix, HashSet<char> result)
@@ -271,7 +410,8 @@ public class WordRegion : MonoBehaviour
 
     public void CheckAnswer(string checkWord)
     {
-        LineWord line = lines.Find(x => x.answer == checkWord);
+        string normalized = string.IsNullOrEmpty(checkWord) ? string.Empty : checkWord.Trim().ToUpperInvariant();
+        LineWord line = lines.Find(x => x.answer == normalized);
 
         if (line != null)
         {
@@ -293,9 +433,13 @@ public class WordRegion : MonoBehaviour
                 textPreview.SetExistColor();
             }
         }
-        else if (validWords.Contains(checkWord.ToLower()))
+        else if (TryProcessHiddenWord(normalized))
         {
-            ExtraWord.instance.ProcessWorld(checkWord);
+            // Hidden word collected/recognized.
+        }
+        else if (validWords.Contains(normalized.ToLowerInvariant()))
+        {
+            ExtraWord.instance.ProcessWorld(normalized);
         }
         else
         {

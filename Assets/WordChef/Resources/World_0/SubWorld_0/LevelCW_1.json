@@ -2,21 +2,40 @@
     "CrosswordConfigs": [
         {
             "Answer": "hair",
-            "XPos": 10,
-            "YPos": 8,
+            "XPos": 0,
+            "YPos": 2,
             "Direction": 0
         },
         {
             "Answer": "ash",
-            "XPos": 10,
-            "YPos": 6,
+            "XPos": 0,
+            "YPos": 0,
             "Direction": 1
         },
         {
             "Answer": "pain",
-            "XPos": 12,
-            "YPos": 6,
+            "XPos": 2,
+            "YPos": 0,
             "Direction": 1
         }
+    ],
+    "HiddenWords": [
+        "air",
+        "hip",
+        "nap",
+        "pair",
+        "pan",
+        "par",
+        "pin",
+        "rain",
+        "ran",
+        "rap",
+        "rash",
+        "sap",
+        "ship",
+        "sin",
+        "sir",
+        "snap",
+        "span"
     ]
 }

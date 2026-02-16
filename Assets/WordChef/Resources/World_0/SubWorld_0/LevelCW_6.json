@@ -1,0 +1,49 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "rag",
+            "XPos": 1,
+            "YPos": 2,
+            "Direction": 0
+        },
+        {
+            "Answer": "care",
+            "XPos": 1,
+            "YPos": 0,
+            "Direction": 1
+        },
+        {
+            "Answer": "ace",
+            "XPos": 0,
+            "YPos": 0,
+            "Direction": 0
+        },
+        {
+            "Answer": "age",
+            "XPos": 3,
+            "YPos": 1,
+            "Direction": 1
+        },
+        {
+            "Answer": "arc",
+            "XPos": 3,
+            "YPos": 1,
+            "Direction": 0
+        },
+        {
+            "Answer": "car",
+            "XPos": 5,
+            "YPos": 1,
+            "Direction": 1
+        }
+    ],
+    "HiddenWords": [
+        "acre",
+        "cage",
+        "ear",
+        "era",
+        "gear",
+        "race",
+        "rage"
+    ]
+}

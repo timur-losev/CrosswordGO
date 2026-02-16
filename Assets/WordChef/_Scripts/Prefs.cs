@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -73,6 +73,16 @@ public static class Prefs {
     public static string[] GetExtraWords(int world, int subWorld, int level)
     {
         return CryptoPlayerPrefsX.GetStringArray("extra_words_" + world + "_" + subWorld + "_" + level);
+    }
+
+    public static void SetCollectedHiddenWords(int world, int subWorld, int level, string[] hiddenWords)
+    {
+        CryptoPlayerPrefsX.SetStringArray("hidden_words_collected_" + world + "_" + subWorld + "_" + level, hiddenWords);
+    }
+
+    public static string[] GetCollectedHiddenWords(int world, int subWorld, int level)
+    {
+        return CryptoPlayerPrefsX.GetStringArray("hidden_words_collected_" + world + "_" + subWorld + "_" + level);
     }
 
     public static int extraProgress

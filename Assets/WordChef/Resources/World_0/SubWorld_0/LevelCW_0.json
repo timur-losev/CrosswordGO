@@ -2,33 +2,45 @@
     "CrosswordConfigs": [
         {
             "Answer": "star",
-            "XPos": 11,
-            "YPos": 6,
+            "XPos": 2,
+            "YPos": 0,
             "Direction": 1
         },
         {
             "Answer": "art",
-            "XPos": 11,
-            "YPos": 8,
+            "XPos": 2,
+            "YPos": 2,
             "Direction": 0
         },
         {
             "Answer": "sea",
-            "XPos": 11,
-            "YPos": 6,
+            "XPos": 2,
+            "YPos": 0,
             "Direction": 0
         },
         {
             "Answer": "tea",
-            "XPos": 13,
-            "YPos": 8,
+            "XPos": 4,
+            "YPos": 2,
             "Direction": 1
         },
         {
             "Answer": "ear",
-            "XPos": 9,
-            "YPos": 9,
+            "XPos": 0,
+            "YPos": 3,
             "Direction": 0
         }
+    ],
+    "HiddenWords": [
+        "ate",
+        "east",
+        "era",
+        "est",
+        "rat",
+        "rate",
+        "rest",
+        "seat",
+        "sta",
+        "taser"
     ]
 }

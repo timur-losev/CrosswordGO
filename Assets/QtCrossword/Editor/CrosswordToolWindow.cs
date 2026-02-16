@@ -11,6 +11,7 @@ namespace QtCrossword.EditorTools
     {
         private const string DefaultStorageFolder = "Assets/WordChef/Resources/World_0/SubWorld_0";
         private const string EnglishWordsFolder = "Assets/WordChef/10000 English Words";
+        private const double HiddenWordSearchTimeoutSeconds = 0.2d;
 
         private string inputText =
             "PYTHON\nWIDGET\nBUTTON\nLAYOUT\nRANDOM\nCROSSWORD";
@@ -26,6 +27,8 @@ namespace QtCrossword.EditorTools
         private Vector2 gridScroll;
         private string statusText = "Ready.";
         private string uniqueLettersText = "Unique letters: -";
+        private string hiddenWordsText = "Hidden words: -";
+        private string hiddenWordInput = string.Empty;
         private string storageFolder = DefaultStorageFolder;
         private List<string> jsonFileNames = new List<string>();
         private int selectedJsonFileIndex = -1;
@@ -44,6 +47,10 @@ namespace QtCrossword.EditorTools
         private string constraintStatusText = "Constraint mode: disabled (using input text).";
         private ConstraintWordSelectionResult lastConstraintResult;
         private bool wordPoolsLoaded;
+        private bool hiddenWordCandidatesBuilt;
+        private readonly List<HiddenWordCandidate> hiddenWordCandidates = new List<HiddenWordCandidate>();
+        private readonly Dictionary<string, List<string>> hiddenWordsByVariantKey = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> hiddenWordSearchCursorByVariantKey = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<int, List<string>> wordPoolsByLength = new Dictionary<int, List<string>>();
         private readonly Dictionary<int, string> wordListFileNames = new Dictionary<int, string>
         {
@@ -56,6 +63,14 @@ namespace QtCrossword.EditorTools
 
         private GUIStyle statusStyle;
         private GUIStyle cellStyle;
+
+        private struct HiddenWordCandidate
+        {
+            public string Word;
+            public uint LetterMask;
+            public int Length;
+            public int FrequencyRank;
+        }
 
         [MenuItem("Tools/Qt Crossword Generator")]
         public static void OpenWindow()
@@ -73,6 +88,7 @@ namespace QtCrossword.EditorTools
         private void OnGUI()
         {
             EnsureStyles();
+            DrawDebugToolbar();
 
             inputOnlyMode = EditorGUILayout.ToggleLeft("Read words only from input text", inputOnlyMode);
             EditorGUILayout.LabelField("Enter words (one per line or separated by commas/spaces):", EditorStyles.boldLabel);
@@ -86,10 +102,18 @@ namespace QtCrossword.EditorTools
             DrawConstraintSection();
 
             EditorGUILayout.Space(6f);
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Generate crossword", GUILayout.Height(28f)))
             {
                 OnGenerateClicked();
             }
+            EditorGUI.BeginDisabledGroup(currentVariants.Count == 0);
+            if (GUILayout.Button("Add hidden word from unique letters", GUILayout.Height(28f)))
+            {
+                OnAddHiddenWordClicked();
+            }
+            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.EndHorizontal();
 
             DrawNavigationRow();
             DrawRotationRow();
@@ -98,10 +122,89 @@ namespace QtCrossword.EditorTools
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField(statusText, statusStyle);
             EditorGUILayout.LabelField(uniqueLettersText, statusStyle);
+            DrawHiddenWordsStrip();
             EditorGUILayout.LabelField(constraintStatusText, statusStyle);
             EditorGUILayout.Space(8f);
 
             DrawGridArea();
+        }
+
+        private void DrawDebugToolbar()
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            Rect buttonRect = GUILayoutUtility.GetRect(new GUIContent("Debug"), EditorStyles.toolbarDropDown, GUILayout.Width(90f));
+            if (GUI.Button(buttonRect, "Debug", EditorStyles.toolbarDropDown))
+            {
+                ShowDebugMenu(buttonRect);
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void ShowDebugMenu(Rect buttonRect)
+        {
+            GenericMenu menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Erase Save"), false, OnEraseSaveDebugClicked);
+            menu.DropDown(buttonRect);
+        }
+
+        private void OnEraseSaveDebugClicked()
+        {
+            bool confirmed = EditorUtility.DisplayDialog(
+                "Erase Save",
+                "Delete all local saves and runtime caches?\n\nThis action cannot be undone.",
+                "Erase",
+                "Cancel"
+            );
+            if (!confirmed)
+            {
+                return;
+            }
+
+            try
+            {
+                CPlayerPrefs.DeleteAll();
+                CPlayerPrefs.Save();
+                PlayerPrefs.DeleteAll();
+                PlayerPrefs.Save();
+                if (Caching.ready)
+                {
+                    Caching.ClearCache();
+                }
+
+                GameState.currentWorld = 0;
+                GameState.currentSubWorld = 0;
+                GameState.currentLevel = 0;
+                GameState.unlockedWorld = -1;
+                GameState.unlockedSubWord = -1;
+                GameState.unlockedLevel = -1;
+
+                ResetToolCachesAfterErase();
+                statusText = "Debug: saves and caches erased.";
+                ShowNotification(new GUIContent("Erase Save completed"));
+                Repaint();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Erase Save failed: " + ex);
+                EditorUtility.DisplayDialog("Erase Save failed", "See Console for details.", "OK");
+            }
+        }
+
+        private void ResetToolCachesAfterErase()
+        {
+            hiddenWordsByVariantKey.Clear();
+            hiddenWordSearchCursorByVariantKey.Clear();
+            hiddenWordCandidates.Clear();
+            hiddenWordCandidatesBuilt = false;
+            wordPoolsLoaded = false;
+            currentVariants.Clear();
+            currentVariantIndex = 0;
+            variantsTruncated = false;
+            rotationSteps = 0;
+            hiddenWordsText = "Hidden words: -";
+            uniqueLettersText = "Unique letters: -";
+            constraintStatusText = "Constraint mode: disabled (using input text).";
         }
 
         private void DrawNavigationRow()
@@ -338,6 +441,8 @@ namespace QtCrossword.EditorTools
             }
 
             wordPoolsByLength.Clear();
+            hiddenWordCandidates.Clear();
+            hiddenWordCandidatesBuilt = false;
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
 
             foreach (KeyValuePair<int, string> pair in wordListFileNames)
@@ -349,16 +454,17 @@ namespace QtCrossword.EditorTools
 
                 if (File.Exists(absolutePath))
                 {
-                    string[] lines = File.ReadAllLines(absolutePath);
-                    for (int i = 0; i < lines.Length; i++)
+                    string fileContent = File.ReadAllText(absolutePath);
+                    List<string> parsedWords = CrosswordWordParser.ParseWords(fileContent);
+                    for (int i = 0; i < parsedWords.Count; i++)
                     {
-                        string line = lines[i];
-                        if (string.IsNullOrWhiteSpace(line))
+                        string word = parsedWords[i];
+                        if (string.IsNullOrWhiteSpace(word) || word.Length != length)
                         {
                             continue;
                         }
 
-                        words.Add(line.Trim().ToUpperInvariant());
+                        words.Add(word.Trim().ToUpperInvariant());
                     }
                 }
                 else
@@ -370,6 +476,462 @@ namespace QtCrossword.EditorTools
             }
 
             wordPoolsLoaded = true;
+        }
+
+        private void BuildHiddenWordCandidatesIfNeeded()
+        {
+            if (hiddenWordCandidatesBuilt)
+            {
+                return;
+            }
+
+            hiddenWordCandidates.Clear();
+            foreach (KeyValuePair<int, List<string>> pool in wordPoolsByLength)
+            {
+                List<string> words = pool.Value;
+                if (words == null)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < words.Count; i++)
+                {
+                    string word = words[i];
+                    uint mask;
+                    if (!TryBuildLetterMask(word, out mask))
+                    {
+                        continue;
+                    }
+
+                    hiddenWordCandidates.Add(new HiddenWordCandidate
+                    {
+                        Word = word,
+                        LetterMask = mask,
+                        Length = word.Length,
+                        FrequencyRank = i
+                    });
+                }
+            }
+
+            hiddenWordCandidates.Sort((left, right) =>
+            {
+                int byFrequency = left.FrequencyRank.CompareTo(right.FrequencyRank);
+                if (byFrequency != 0)
+                {
+                    return byFrequency;
+                }
+
+                int byLength = right.Length.CompareTo(left.Length);
+                if (byLength != 0)
+                {
+                    return byLength;
+                }
+
+                return string.Compare(left.Word, right.Word, StringComparison.Ordinal);
+            });
+
+            hiddenWordCandidatesBuilt = true;
+        }
+
+        private void OnAddHiddenWordClicked()
+        {
+            if (currentVariants.Count == 0)
+            {
+                return;
+            }
+
+            EnsureWordPoolsLoaded();
+            BuildHiddenWordCandidatesIfNeeded();
+
+            CrosswordResult result = currentVariants[currentVariantIndex];
+            uint availableLettersMask = BuildUniqueLetterMaskFromGrid(result.Grid);
+            if (availableLettersMask == 0)
+            {
+                EditorUtility.DisplayDialog("Hidden words", "No letters found in current crossword.", "OK");
+                return;
+            }
+
+            List<string> hiddenForVariant = GetHiddenWordsForVariant(result);
+            HashSet<string> blockedWords = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < result.UsedWords.Count; i++)
+            {
+                blockedWords.Add(result.UsedWords[i].Trim().ToUpperInvariant());
+            }
+            for (int i = 0; i < hiddenForVariant.Count; i++)
+            {
+                blockedWords.Add(hiddenForVariant[i].Trim().ToUpperInvariant());
+            }
+
+            int candidateCount = hiddenWordCandidates.Count;
+            if (candidateCount == 0)
+            {
+                EditorUtility.DisplayDialog("Hidden words", "No candidate words loaded.", "OK");
+                return;
+            }
+
+            int currentIndex = GetHiddenWordSearchStartIndex(result, candidateCount);
+            int checkedCount = 0;
+            double deadline = EditorApplication.timeSinceStartup + HiddenWordSearchTimeoutSeconds;
+
+            while (checkedCount < candidateCount)
+            {
+                if (EditorApplication.timeSinceStartup >= deadline)
+                {
+                    SetHiddenWordSearchStartIndex(result, currentIndex, candidateCount);
+                    ShowNotification(new GUIContent("Hidden word search timed out"));
+                    return;
+                }
+
+                HiddenWordCandidate candidate = hiddenWordCandidates[currentIndex];
+                if (blockedWords.Contains(candidate.Word))
+                {
+                    currentIndex = (currentIndex + 1) % candidateCount;
+                    checkedCount++;
+                    continue;
+                }
+
+                if ((candidate.LetterMask & ~availableLettersMask) != 0u)
+                {
+                    currentIndex = (currentIndex + 1) % candidateCount;
+                    checkedCount++;
+                    continue;
+                }
+
+                hiddenForVariant.Add(candidate.Word);
+                hiddenForVariant.Sort(StringComparer.Ordinal);
+                UpdateHiddenWordsLabel(result);
+                SetHiddenWordSearchStartIndex(result, (currentIndex + 1) % candidateCount, candidateCount);
+                ShowNotification(new GUIContent("Hidden word added: " + candidate.Word.ToLowerInvariant()));
+                Repaint();
+                return;
+
+                // unreachable by design
+            }
+
+            SetHiddenWordSearchStartIndex(result, 0, candidateCount);
+
+            EditorUtility.DisplayDialog(
+                "Hidden words",
+                "No hidden word was found using current unique letters.",
+                "OK"
+            );
+        }
+
+        private List<string> GetHiddenWordsForVariant(CrosswordResult result)
+        {
+            string key = GetVariantKey(result);
+            if (string.IsNullOrEmpty(key))
+            {
+                return new List<string>();
+            }
+
+            List<string> words;
+            if (!hiddenWordsByVariantKey.TryGetValue(key, out words))
+            {
+                words = new List<string>();
+                hiddenWordsByVariantKey[key] = words;
+            }
+
+            return words;
+        }
+
+        private void SetHiddenWordsForVariant(CrosswordResult result, List<string> words)
+        {
+            string key = GetVariantKey(result);
+            if (string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+
+            hiddenWordsByVariantKey[key] = NormalizeHiddenWords(words);
+        }
+
+        private static string GetVariantKey(CrosswordResult result)
+        {
+            if (result == null || result.Grid == null)
+            {
+                return string.Empty;
+            }
+
+            return CrosswordGenerator.GridSignature(result.Grid);
+        }
+
+        private int GetHiddenWordSearchStartIndex(CrosswordResult result, int candidateCount)
+        {
+            if (candidateCount <= 0)
+            {
+                return 0;
+            }
+
+            string key = GetVariantKey(result);
+            if (string.IsNullOrEmpty(key))
+            {
+                return 0;
+            }
+
+            int savedIndex;
+            if (!hiddenWordSearchCursorByVariantKey.TryGetValue(key, out savedIndex))
+            {
+                return 0;
+            }
+
+            if (savedIndex < 0 || savedIndex >= candidateCount)
+            {
+                return 0;
+            }
+
+            return savedIndex;
+        }
+
+        private void SetHiddenWordSearchStartIndex(CrosswordResult result, int nextIndex, int candidateCount)
+        {
+            if (candidateCount <= 0)
+            {
+                return;
+            }
+
+            string key = GetVariantKey(result);
+            if (string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+
+            int normalizedIndex = nextIndex;
+            if (normalizedIndex < 0)
+            {
+                normalizedIndex = 0;
+            }
+            if (normalizedIndex >= candidateCount)
+            {
+                normalizedIndex %= candidateCount;
+            }
+
+            hiddenWordSearchCursorByVariantKey[key] = normalizedIndex;
+        }
+
+        private static List<string> NormalizeHiddenWords(IEnumerable<string> words)
+        {
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            List<string> normalized = new List<string>();
+            if (words == null)
+            {
+                return normalized;
+            }
+
+            foreach (string word in words)
+            {
+                if (string.IsNullOrWhiteSpace(word))
+                {
+                    continue;
+                }
+
+                string normalizedWord = word.Trim().ToUpperInvariant();
+                if (normalizedWord.Length < 2)
+                {
+                    continue;
+                }
+
+                if (seen.Add(normalizedWord))
+                {
+                    normalized.Add(normalizedWord);
+                }
+            }
+
+            normalized.Sort(StringComparer.Ordinal);
+            return normalized;
+        }
+
+        private void UpdateHiddenWordsLabel(CrosswordResult result)
+        {
+            if (result == null || result.Grid == null || result.Grid.Count == 0)
+            {
+                hiddenWordsText = "Hidden words: -";
+                return;
+            }
+
+            List<string> hiddenWords = GetHiddenWordsForVariant(result);
+            if (hiddenWords == null || hiddenWords.Count == 0)
+            {
+                hiddenWordsText = "Hidden words: -";
+                return;
+            }
+
+            List<string> displayWords = new List<string>(hiddenWords.Count);
+            for (int i = 0; i < hiddenWords.Count; i++)
+            {
+                displayWords.Add(hiddenWords[i].ToLowerInvariant());
+            }
+
+            hiddenWordsText = "Hidden words: " + string.Join(", ", displayWords.ToArray());
+        }
+
+        private void DrawHiddenWordsStrip()
+        {
+            if (currentVariants.Count == 0)
+            {
+                EditorGUILayout.LabelField(hiddenWordsText, statusStyle);
+                return;
+            }
+
+            CrosswordResult result = currentVariants[currentVariantIndex];
+            List<string> hiddenWords = GetHiddenWordsForVariant(result);
+
+            int removeIndex = -1;
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Hidden words:", GUILayout.Width(90f));
+            hiddenWordInput = EditorGUILayout.TextField(hiddenWordInput, GUILayout.Width(140f));
+            if (GUILayout.Button("+", EditorStyles.miniButton, GUILayout.Width(18f), GUILayout.Height(16f)))
+            {
+                TryAddManualHiddenWord(result);
+            }
+
+            if (hiddenWords == null || hiddenWords.Count == 0)
+            {
+                GUILayout.Label("-", statusStyle, GUILayout.ExpandWidth(false));
+            }
+            else
+            {
+                for (int i = 0; i < hiddenWords.Count; i++)
+                {
+                    EditorGUILayout.BeginHorizontal(GUI.skin.box, GUILayout.ExpandWidth(false));
+                    GUILayout.Label(hiddenWords[i].ToLowerInvariant(), GUILayout.ExpandWidth(false));
+                    if (GUILayout.Button("-", EditorStyles.miniButton, GUILayout.Width(18f), GUILayout.Height(16f)))
+                    {
+                        removeIndex = i;
+                    }
+                    EditorGUILayout.EndHorizontal();
+                }
+            }
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            if (removeIndex >= 0 && removeIndex < hiddenWords.Count)
+            {
+                hiddenWords.RemoveAt(removeIndex);
+                UpdateHiddenWordsLabel(result);
+                Repaint();
+            }
+        }
+
+        private void TryAddManualHiddenWord(CrosswordResult result)
+        {
+            if (result == null || result.Grid == null || result.Grid.Count == 0)
+            {
+                return;
+            }
+
+            string normalized = string.IsNullOrWhiteSpace(hiddenWordInput)
+                ? string.Empty
+                : hiddenWordInput.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(normalized))
+            {
+                EditorUtility.DisplayDialog("Hidden words", "Enter a word first.", "OK");
+                return;
+            }
+
+            if (normalized.Length < 2)
+            {
+                EditorUtility.DisplayDialog("Hidden words", "Hidden word must contain at least 2 letters.", "OK");
+                return;
+            }
+
+            uint wordMask;
+            if (!TryBuildLetterMask(normalized, out wordMask))
+            {
+                EditorUtility.DisplayDialog(
+                    "Hidden words",
+                    "Use A-Z letters only and avoid repeating letters.",
+                    "OK"
+                );
+                return;
+            }
+
+            uint availableLettersMask = BuildUniqueLetterMaskFromGrid(result.Grid);
+            if ((wordMask & ~availableLettersMask) != 0u)
+            {
+                EditorUtility.DisplayDialog(
+                    "Hidden words",
+                    "The word cannot be composed from the current crossword unique letters.",
+                    "OK"
+                );
+                return;
+            }
+
+            List<string> hiddenWords = GetHiddenWordsForVariant(result);
+            if (hiddenWords.Contains(normalized))
+            {
+                return;
+            }
+
+            for (int i = 0; i < result.UsedWords.Count; i++)
+            {
+                string usedWord = result.UsedWords[i];
+                if (string.Equals(usedWord, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    EditorUtility.DisplayDialog(
+                        "Hidden words",
+                        "This word already exists in the crossword.",
+                        "OK"
+                    );
+                    return;
+                }
+            }
+
+            hiddenWords.Add(normalized);
+            hiddenWords.Sort(StringComparer.Ordinal);
+            hiddenWordInput = string.Empty;
+            UpdateHiddenWordsLabel(result);
+            Repaint();
+        }
+
+        private static bool TryBuildLetterMask(string word, out uint mask)
+        {
+            mask = 0u;
+            if (string.IsNullOrWhiteSpace(word))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < word.Length; i++)
+            {
+                char c = char.ToUpperInvariant(word[i]);
+                if (c < 'A' || c > 'Z')
+                {
+                    return false;
+                }
+
+                uint bit = 1u << (c - 'A');
+                if ((mask & bit) != 0u)
+                {
+                    return false;
+                }
+
+                mask |= bit;
+            }
+
+            return true;
+        }
+
+        private static uint BuildUniqueLetterMaskFromGrid(Dictionary<GridCoordinate, char> grid)
+        {
+            uint mask = 0u;
+            if (grid == null)
+            {
+                return mask;
+            }
+
+            foreach (KeyValuePair<GridCoordinate, char> pair in grid)
+            {
+                char c = char.ToUpperInvariant(pair.Value);
+                if (c < 'A' || c > 'Z')
+                {
+                    continue;
+                }
+
+                mask |= 1u << (c - 'A');
+            }
+
+            return mask;
         }
 
         private HashSet<string> CollectUsedWordsFromStorageFolder()
@@ -511,6 +1073,9 @@ namespace QtCrossword.EditorTools
                 variantsTruncated = false;
                 lastInputWordCount = result.UsedWords.Count;
                 rotationSteps = 0;
+                hiddenWordsByVariantKey.Clear();
+                hiddenWordSearchCursorByVariantKey.Clear();
+                SetHiddenWordsForVariant(result, data.HiddenWords);
                 inputText = string.Join("\n", result.UsedWords.ToArray());
                 ShowVariant(0);
                 ShowNotification(new GUIContent("Crossword loaded from " + Path.GetFileName(absolutePath)));
@@ -647,7 +1212,8 @@ namespace QtCrossword.EditorTools
 
             CrosswordData data = new CrosswordData
             {
-                CrosswordConfigs = new List<CrosswordConfig>()
+                CrosswordConfigs = new List<CrosswordConfig>(),
+                HiddenWords = new List<string>()
             };
 
             for (int i = 0; i < result.Placements.Count; i++)
@@ -662,6 +1228,12 @@ namespace QtCrossword.EditorTools
                         Direction = placement.Horizontal ? 0 : 1
                     }
                 );
+            }
+
+            List<string> hiddenForVariant = GetHiddenWordsForVariant(result);
+            for (int i = 0; i < hiddenForVariant.Count; i++)
+            {
+                data.HiddenWords.Add(hiddenForVariant[i].ToLowerInvariant());
             }
 
             return data;
@@ -910,6 +1482,8 @@ namespace QtCrossword.EditorTools
             lastInputWordCount = words.Count;
             variantsTruncated = variantsResult.Truncated;
             rotationSteps = 0;
+            hiddenWordsByVariantKey.Clear();
+            hiddenWordSearchCursorByVariantKey.Clear();
             ShowVariant(currentVariantIndex);
         }
 
@@ -961,6 +1535,7 @@ namespace QtCrossword.EditorTools
             {
                 statusText = "Ready.";
                 uniqueLettersText = "Unique letters: -";
+                hiddenWordsText = "Hidden words: -";
                 Repaint();
                 return;
             }
@@ -970,6 +1545,7 @@ namespace QtCrossword.EditorTools
             CrosswordResult result = currentVariants[currentVariantIndex];
             UpdateStatusLabel(result);
             UpdateUniqueLettersLabel(result);
+            UpdateHiddenWordsLabel(result);
             Repaint();
         }
 
