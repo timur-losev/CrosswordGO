@@ -67,7 +67,7 @@ public class MainController : BaseController {
 
         if (levelNameText != null)
         {
-            levelNameText.text = GameState.currentSubWorldName + " - " + (level + 1);
+            levelNameText.text = $"LevelCW_{level}.json";
         }
     }
 
