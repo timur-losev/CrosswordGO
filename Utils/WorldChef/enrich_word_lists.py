@@ -114,6 +114,7 @@ BLOCKED_WORDS = {
     "you",
     "your",
     "yours",
+    "ser",
 }
 
 
@@ -148,6 +149,18 @@ def parse_args() -> argparse.Namespace:
         help="Maximum Datamuse results per request.",
     )
     parser.add_argument(
+        "--min-score",
+        type=float,
+        default=300.0,
+        help="Minimum Datamuse score for candidate words.",
+    )
+    parser.add_argument(
+        "--min-freq",
+        type=float,
+        default=1.5,
+        help="Minimum Datamuse frequency tag (f:*) for candidate words.",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=20.0,
@@ -174,6 +187,14 @@ def parse_args() -> argparse.Namespace:
         "--append-only",
         action="store_true",
         help="Only append new words and keep existing lines unchanged.",
+    )
+    parser.add_argument(
+        "--strict-noun",
+        action="store_true",
+        help=(
+            "Use strict noun filtering: allow only words whose exact POS tags "
+            "are noun-only (exclude noun+verb, noun+adjective, etc.)."
+        ),
     )
     parser.add_argument(
         "--log-level",
@@ -394,17 +415,23 @@ def is_clean_word(word: str, length: int) -> bool:
     )
 
 
-def has_noun_tag(tags: list[str]) -> bool:
+def has_noun_tag(tags: list[str], strict_noun: bool = False) -> bool:
     if "n" not in tags or "prop" in tags:
         return False
     pos_order = [tag for tag in tags if tag in {"n", "v", "adj", "adv", "u"}]
     if not pos_order:
         return False
+    if strict_noun:
+        return all(tag == "n" for tag in pos_order)
     return pos_order[0] == "n"
 
 
 def is_blocked_word(word: str) -> bool:
     return word in BLOCKED_WORDS
+
+
+def noun_cache_key(word: str, strict_noun: bool) -> str:
+    return f"{word}|strict={1 if strict_noun else 0}"
 
 
 def is_noun_exact(
@@ -414,12 +441,22 @@ def is_noun_exact(
     retries: int,
     delay: float,
     logger: logging.Logger,
+    strict_noun: bool = False,
 ) -> bool:
+    cache_key = noun_cache_key(word, strict_noun)
+
     if is_blocked_word(word):
-        noun_cache[word] = False
+        noun_cache[cache_key] = False
         return False
 
-    cached = noun_cache.get(word)
+    cached = noun_cache.get(cache_key)
+    if cached is None and not strict_noun:
+        # Backward compatibility with old cache format: {"word": bool}.
+        legacy_cached = noun_cache.get(word)
+        if isinstance(legacy_cached, bool):
+            noun_cache[cache_key] = legacy_cached
+            return legacy_cached
+
     if cached is not None:
         return cached
 
@@ -439,27 +476,41 @@ def is_noun_exact(
         if row_word != word:
             continue
         tags = item.get("tags", [])
-        if isinstance(tags, list) and has_noun_tag(tags):
+        if isinstance(tags, list) and has_noun_tag(tags, strict_noun=strict_noun):
             is_noun = True
             break
 
-    noun_cache[word] = is_noun
+    noun_cache[cache_key] = is_noun
     return is_noun
 
 
 def rank_from_item(item: dict) -> float:
-    score = float(item.get("score", 0.0))
-    tags = item.get("tags", [])
-    best_freq = 0.0
-    if isinstance(tags, list):
-        for tag in tags:
-            if not isinstance(tag, str) or not tag.startswith("f:"):
-                continue
-            try:
-                best_freq = max(best_freq, float(tag[2:]))
-            except ValueError:
-                continue
+    score = parse_score(item)
+    best_freq = extract_best_freq(item.get("tags", []))
     return score + best_freq * 1000.0
+
+
+def parse_score(item: dict) -> float:
+    raw_score = item.get("score", 0.0)
+    try:
+        return float(raw_score)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def extract_best_freq(tags: object) -> float:
+    if not isinstance(tags, list):
+        return 0.0
+
+    best_freq = 0.0
+    for tag in tags:
+        if not isinstance(tag, str) or not tag.startswith("f:"):
+            continue
+        try:
+            best_freq = max(best_freq, float(tag[2:]))
+        except ValueError:
+            continue
+    return best_freq
 
 
 def is_singular(word: str, inflect_engine) -> bool:
@@ -478,12 +529,18 @@ def is_singular(word: str, inflect_engine) -> bool:
 def collect_candidates(
     length: int,
     max_per_query: int,
+    min_score: float,
+    min_freq: float,
     timeout: float,
     retries: int,
     delay: float,
     logger: logging.Logger,
-) -> list[tuple[str, float]]:
+    strict_noun: bool = False,
+) -> tuple[list[tuple[str, float]], dict[str, int]]:
     ranked: dict[str, float] = {}
+    scanned_total = 0
+    skipped_low_score = 0
+    skipped_low_freq = 0
 
     for pattern in build_patterns(length):
         rows = fetch_datamuse(
@@ -495,15 +552,24 @@ def collect_candidates(
             logger=logger,
         )
         for item in rows:
+            scanned_total += 1
             word = str(item.get("word", "")).lower().strip()
             tags = item.get("tags", [])
             if not isinstance(tags, list):
                 continue
-            if not has_noun_tag(tags):
+            if not has_noun_tag(tags, strict_noun=strict_noun):
                 continue
             if not is_clean_word(word, length):
                 continue
             if is_blocked_word(word):
+                continue
+            score = parse_score(item)
+            if score < min_score:
+                skipped_low_score += 1
+                continue
+            best_freq = extract_best_freq(tags)
+            if best_freq < min_freq:
+                skipped_low_freq += 1
                 continue
 
             rank = rank_from_item(item)
@@ -511,7 +577,13 @@ def collect_candidates(
             if previous is None or rank > previous:
                 ranked[word] = rank
 
-    return sorted(ranked.items(), key=lambda pair: pair[1], reverse=True)
+    stats = {
+        "scanned_total": scanned_total,
+        "kept_unique": len(ranked),
+        "skipped_low_score": skipped_low_score,
+        "skipped_low_freq": skipped_low_freq,
+    }
+    return sorted(ranked.items(), key=lambda pair: pair[1], reverse=True), stats
 
 
 def process_file(
@@ -551,6 +623,7 @@ def process_file(
                 retries=args.retries,
                 delay=args.delay,
                 logger=logger,
+                strict_noun=args.strict_noun,
             ):
                 cleanup_non_noun += 1
                 continue
@@ -558,13 +631,16 @@ def process_file(
         removed = len(existing_words) - len(base_words)
 
     existing_set = set(base_words)
-    ranked_candidates = collect_candidates(
+    ranked_candidates, candidate_stats = collect_candidates(
         length=length,
         max_per_query=args.max_per_query,
+        min_score=args.min_score,
+        min_freq=args.min_freq,
         timeout=args.timeout,
         retries=args.retries,
         delay=args.delay,
         logger=logger,
+        strict_noun=args.strict_noun,
     )
 
     additions: list[str] = []
@@ -572,6 +648,7 @@ def process_file(
     skip_blocked = 0
     skip_non_unique = 0
     skip_non_singular = 0
+    skip_non_noun = 0
 
     for word, _rank in ranked_candidates:
         if word in existing_set:
@@ -585,6 +662,17 @@ def process_file(
             continue
         if not is_singular(word, inflect_engine):
             skip_non_singular += 1
+            continue
+        if not is_noun_exact(
+            word=word,
+            noun_cache=noun_cache,
+            timeout=args.timeout,
+            retries=args.retries,
+            delay=args.delay,
+            logger=logger,
+            strict_noun=args.strict_noun,
+        ):
+            skip_non_noun += 1
             continue
         additions.append(word)
         if len(additions) >= args.limit:
@@ -604,7 +692,7 @@ def process_file(
         len(existing_words),
         len(base_words),
         removed,
-        len(ranked_candidates),
+        candidate_stats["kept_unique"],
         len(additions),
         wrote_file,
     )
@@ -622,12 +710,19 @@ def process_file(
         cleanup_non_noun,
     )
     logger.debug(
-        "%s candidate skip stats | existing=%s blocked=%s non_unique=%s non_singular=%s",
+        "%s candidate skip stats | scanned=%s kept_unique=%s low_score=%s "
+        "low_freq=%s existing=%s blocked=%s non_unique=%s non_singular=%s "
+        "non_noun=%s",
         path.name,
+        candidate_stats["scanned_total"],
+        candidate_stats["kept_unique"],
+        candidate_stats["skipped_low_score"],
+        candidate_stats["skipped_low_freq"],
         skip_existing,
         skip_blocked,
         skip_non_unique,
         skip_non_singular,
+        skip_non_noun,
     )
     return len(additions), removed
 
@@ -639,12 +734,16 @@ def main() -> None:
     logger.info("------------------------------------------------------------")
     logger.info("Word list enrich run started")
     logger.info(
-        "Options: dry_run=%s append_only=%s all_files=%s limit=%s max_per_query=%s",
+        "Options: dry_run=%s append_only=%s strict_noun=%s all_files=%s "
+        "limit=%s max_per_query=%s min_score=%s min_freq=%s",
         args.dry_run,
         args.append_only,
+        args.strict_noun,
         args.all_files,
         args.limit,
         args.max_per_query,
+        args.min_score,
+        args.min_freq,
     )
     if log_file_path is not None:
         logger.info("Log file: %s", log_file_path)

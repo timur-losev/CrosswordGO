@@ -40,6 +40,7 @@ namespace QtCrossword.EditorTools
         private int targetConstraintUniqueLetters = 12;
         private int targetConstraintUniqueLettersSpread;
         private bool discardUsedWords;
+        private bool inputOnlyMode;
         private string constraintStatusText = "Constraint mode: disabled (using input text).";
         private ConstraintWordSelectionResult lastConstraintResult;
         private bool wordPoolsLoaded;
@@ -73,6 +74,7 @@ namespace QtCrossword.EditorTools
         {
             EnsureStyles();
 
+            inputOnlyMode = EditorGUILayout.ToggleLeft("Read words only from input text", inputOnlyMode);
             EditorGUILayout.LabelField("Enter words (one per line or separated by commas/spaces):", EditorStyles.boldLabel);
             inputText = EditorGUILayout.TextArea(inputText, GUILayout.MinHeight(120f));
 
@@ -837,7 +839,12 @@ namespace QtCrossword.EditorTools
             lastConstraintResult = null;
             constraintStatusText = "Constraint mode: disabled (using input text).";
 
-            if (HasConstraintRequest())
+            if (inputOnlyMode)
+            {
+                words = CrosswordWordParser.ParseWords(inputText);
+                constraintStatusText = "Input-only mode: constraint section ignored.";
+            }
+            else if (HasConstraintRequest())
             {
                 ConstraintWordSelectionResult constraintResult = BuildConstraintSelection();
                 lastConstraintResult = constraintResult;

@@ -7,9 +7,16 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 1
     path: Assets/WordChef/_Scenes/Home.unity
+    guid: 064b96d707ae11340bcbed5e31361e30
   - enabled: 1
     path: Assets/WordChef/_Scenes/SelectWorld.unity
+    guid: ac051abc6abdcc54ebb3be68da026268
   - enabled: 1
     path: Assets/WordChef/_Scenes/SelectLevel.unity
+    guid: 739f8ceaaec6de542a34d1a121b43241
   - enabled: 1
     path: Assets/WordChef/_Scenes/Main.unity
+    guid: a5a6bde723c00464083985bffb55a5b7
+  m_configObjects:
+    com.unity.adaptiveperformance.simulator.provider_settings: {fileID: 11400000,
+      guid: a5cd1ae96e75c5c4c88cd01dcb3192eb, type: 2}

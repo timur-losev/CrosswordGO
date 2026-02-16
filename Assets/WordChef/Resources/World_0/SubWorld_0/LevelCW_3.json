@@ -1,0 +1,40 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "info",
+            "XPos": 2,
+            "YPos": 2,
+            "Direction": 0
+        },
+        {
+            "Answer": "ego",
+            "XPos": 5,
+            "YPos": 0,
+            "Direction": 1
+        },
+        {
+            "Answer": "few",
+            "XPos": 4,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "ink",
+            "XPos": 2,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "ion",
+            "XPos": 0,
+            "YPos": 3,
+            "Direction": 0
+        },
+        {
+            "Answer": "neo",
+            "XPos": 4,
+            "YPos": 0,
+            "Direction": 0
+        }
+    ]
+}

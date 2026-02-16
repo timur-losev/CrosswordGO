@@ -162,7 +162,7 @@ PlayerSettings:
   androidMaxAspectRatio: 2.1
   applicationIdentifier:
     Android: com.superpow.wordchef
-    Standalone: unity.Superpow.Word Chef
+    Standalone: com.DefaultCompany.Cookies
     iPhone: com.superpow.wordchef
     tvOS: com.superpow.wordchef
   buildNumber:
