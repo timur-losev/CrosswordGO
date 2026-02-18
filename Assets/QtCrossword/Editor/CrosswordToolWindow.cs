@@ -83,12 +83,18 @@ namespace QtCrossword.EditorTools
         private void OnEnable()
         {
             RefreshJsonFiles();
+            SelectLevelZeroByDefault();
+            if (jsonFileNames.Count > 0)
+            {
+                LoadSelectedJson();
+            }
         }
 
         private void OnGUI()
         {
             EnsureStyles();
             DrawDebugToolbar();
+            DrawStorageSection();
 
             inputOnlyMode = EditorGUILayout.ToggleLeft("Read words only from input text", inputOnlyMode);
             EditorGUILayout.LabelField("Enter words (one per line or separated by commas/spaces):", EditorStyles.boldLabel);
@@ -117,7 +123,6 @@ namespace QtCrossword.EditorTools
 
             DrawNavigationRow();
             DrawRotationRow();
-            DrawStorageSection();
 
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField(statusText, statusStyle);
@@ -320,18 +325,9 @@ namespace QtCrossword.EditorTools
                 {
                     selectedJsonFileIndex = newIndex;
                     saveFileName = jsonFileNames[selectedJsonFileIndex];
+                    LoadSelectedJson();
                 }
             }
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUI.BeginDisabledGroup(jsonFileNames.Count == 0);
-            if (GUILayout.Button("Load selected JSON", GUILayout.Height(24f)))
-            {
-                LoadSelectedJson();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
 
             saveFileName = EditorGUILayout.TextField("Save file name", saveFileName);
             EditorGUILayout.BeginHorizontal();
@@ -1040,6 +1036,35 @@ namespace QtCrossword.EditorTools
             {
                 saveFileName = jsonFileNames[selectedJsonFileIndex];
             }
+        }
+
+        private void SelectLevelZeroByDefault()
+        {
+            if (jsonFileNames.Count == 0)
+            {
+                return;
+            }
+
+            int levelZeroIndex = jsonFileNames.FindIndex(name =>
+                string.Equals(name, "LevelCW_0.json", StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (levelZeroIndex < 0)
+            {
+                levelZeroIndex = jsonFileNames.FindIndex(name =>
+                {
+                    string nameWithoutExtension = Path.GetFileNameWithoutExtension(name);
+                    return ExtractTrailingNumber(nameWithoutExtension) == 0;
+                });
+            }
+
+            if (levelZeroIndex < 0)
+            {
+                levelZeroIndex = 0;
+            }
+
+            selectedJsonFileIndex = levelZeroIndex;
+            saveFileName = jsonFileNames[selectedJsonFileIndex];
         }
 
         private void LoadSelectedJson()

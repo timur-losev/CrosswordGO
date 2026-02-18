@@ -1,0 +1,51 @@
+{
+    "CrosswordConfigs": [
+        {
+            "Answer": "friday",
+            "XPos": 0,
+            "YPos": 2,
+            "Direction": 0
+        },
+        {
+            "Answer": "aid",
+            "XPos": 4,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "air",
+            "XPos": 1,
+            "YPos": 0,
+            "Direction": 1
+        },
+        {
+            "Answer": "day",
+            "XPos": 0,
+            "YPos": 0,
+            "Direction": 0
+        },
+        {
+            "Answer": "fig",
+            "XPos": 0,
+            "YPos": 2,
+            "Direction": 1
+        },
+        {
+            "Answer": "fry",
+            "XPos": 5,
+            "YPos": 0,
+            "Direction": 1
+        }
+    ],
+    "HiddenWords": [
+        "dir",
+        "fray",
+        "grid",
+        "rad",
+        "rag",
+        "raid",
+        "ray",
+        "rig",
+        "yard"
+    ]
+}
