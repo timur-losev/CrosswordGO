@@ -48,9 +48,11 @@ public class LevelButton : MonoBehaviour {
         }
         else
         {
-            background.sprite = lockedSprite;
-            GetComponent<Button>().interactable = false;
+            // Keep future levels available from SelectLevel screen.
+            background.sprite = currentSprite;
         }
+
+        GetComponent<Button>().interactable = true;
     }
 
     public void Load()

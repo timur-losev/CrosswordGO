@@ -168,21 +168,7 @@ namespace QtCrossword.EditorTools
 
             try
             {
-                CPlayerPrefs.DeleteAll();
-                CPlayerPrefs.Save();
-                PlayerPrefs.DeleteAll();
-                PlayerPrefs.Save();
-                if (Caching.ready)
-                {
-                    Caching.ClearCache();
-                }
-
-                GameState.currentWorld = 0;
-                GameState.currentSubWorld = 0;
-                GameState.currentLevel = 0;
-                GameState.unlockedWorld = -1;
-                GameState.unlockedSubWord = -1;
-                GameState.unlockedLevel = -1;
+                SaveDebugActions.EraseSaveOrThrow();
 
                 ResetToolCachesAfterErase();
                 statusText = "Debug: saves and caches erased.";

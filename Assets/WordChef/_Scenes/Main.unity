@@ -1832,6 +1832,16 @@ PrefabInstance:
       propertyPath: sceneIndex
       value: 2
       objectReference: {fileID: 0}
+    - target: {fileID: 114612250271500080, guid: 4caac91f78525e440abf18e47b7e0042,
+        type: 3}
+      propertyPath: enableCheatMenuOnHold
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 114612250271500080, guid: 4caac91f78525e440abf18e47b7e0042,
+        type: 3}
+      propertyPath: cheatMenuHoldSeconds
+      value: 3
+      objectReference: {fileID: 0}
     - target: {fileID: 114880728722649416, guid: 4caac91f78525e440abf18e47b7e0042,
         type: 3}
       propertyPath: m_Sprite
